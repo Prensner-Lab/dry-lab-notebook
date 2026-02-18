@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'globus_portal_framework',
 ]
 
 MIDDLEWARE = [
@@ -53,6 +54,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'globus_portal_framework.context_processors.globals',
             ],
         },
     },
@@ -113,3 +115,8 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Override any settings here if a local_settings.py file exists
+try:
+    from .local_settings import *  # noqa
+except ImportError:
+    pass
