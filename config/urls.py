@@ -17,8 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+import globus_portal_framework.urls  # Allows index converter usage
+
+from dry_lab_notebook import views
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path("<index:index>/", views.SearchView.as_view(), name="search"),
     # Provides the basic search portal
     path('', include('globus_portal_framework.urls')),
 ]
