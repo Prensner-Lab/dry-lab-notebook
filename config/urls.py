@@ -27,4 +27,5 @@ urlpatterns = [
     path("<index:index>/detail/<subject>/", views.DetailView.as_view(), name="subject-detail"),
     # Provides the basic search portal
     path('', include('globus_portal_framework.urls')),
+    path('browser/', views.select_files, name='select_browser'),
 ]

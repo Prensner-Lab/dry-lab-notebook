@@ -1,0 +1,25 @@
+<form method="post">
+    {% csrf_token %}
+    <h2>Directory: /{{ current_path }}</h2>
+    
+    <ul>
+        {% if current_path %}
+            <li><a href="?path={{ parent_path }}">📁 .. (Parent)</a></li>
+        {% endif %}
+
+        {% for d in dirs %}
+            <li><a href="?path={{ current_path }}{{ d }}/">📁 {{ d }}</a></li>
+        {% endfor %}
+
+        <hr>
+
+        {% for f in files %}
+            <li>
+                <input type="checkbox" name="files" value="{{ current_path }}{{ f }}">
+                📄 {{ f }}
+            </li>
+        {% endfor %}
+    </ul>
+
+    <button type="submit">Process Selected Files</button>
+</form>
