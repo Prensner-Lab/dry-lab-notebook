@@ -80,27 +80,45 @@ class DetailView(View):
         context = self.get_context_data(index, subject)
         return render(request, get_template(index, self.template), context)
 
-def select_files(request):
-    root = settings.LOCAL_FS_BASE
-    path = request.GET.get('path', '')
-    full_path = os.path.join(root, path)
+class FileBrowserView(View):
+    """File browser integrated with Globus Portal Framework"""
+    DEFAULT_TEMPLATE = "select_browser.html"
     
-    # Get directories and files separately for better UI
-    items = os.listdir(full_path)
-    dirs = [i for i in items if os.path.isdir(os.path.join(full_path, i))]
-    files = [i for i in items if os.path.isfile(os.path.join(full_path, i))]
+    def __init__(self, template=None):
+        super().__init__()
+        self.template = template or self.DEFAULT_TEMPLATE
     
-    # Calculate parent path
-    parent_path = '/'.join(path.split('/')[:-1]) if path else ""
-
-    if request.method == "POST":
+    def get_context_data(self, request, path='') -> dict:
+        """Get directory and file listings for the given path"""
+        root = settings.LOCAL_FS_BASE
+        full_path = os.path.join(root, path)
+        
+        items = os.listdir(full_path)
+        dirs = sorted([i for i in items if os.path.isdir(os.path.join(full_path, i))])
+        files = sorted([i for i in items if os.path.isfile(os.path.join(full_path, i))])
+        
+        stripped = path.rstrip('/')
+        if stripped:
+            parent = '/'.join(stripped.split('/')[:-1])
+            parent_path = parent + '/' if parent else ''
+        else:
+            parent_path = ''
+        
+        return {
+            'dirs': dirs,
+            'files': files,
+            'current_path': path,
+            'parent_path': parent_path,
+        }
+    
+    def get(self, request):
+        """Display file browser"""
+        path = request.GET.get('path', '')
+        context = self.get_context_data(request, path)
+        return render(request, self.template, context)
+    
+    def post(self, request):
+        """Process selected files"""
         selected_files = request.POST.getlist('files')
-        # Logic for your "Another Task" goes here
+        # Logic for processing selected files goes here
         return render(request, 'task_success.html', {'files': selected_files})
-
-    return render(request, 'select_browser.html', {
-        'dirs': dirs,
-        'files': files,
-        'current_path': path,
-        'parent_path': parent_path
-    })
