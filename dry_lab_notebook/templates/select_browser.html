@@ -1,4 +1,17 @@
 {% extends "globus-portal-framework/v2/base.html" %}
+{% load is_active %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% block breadcrumb_items %}
+    <li class="breadcrumb-item {% is_active request 'index-selection' %}">
+      <a class="h5">Transfer</a>
+    </li>
+    {% endblock %}
+  </ol>
+</nav>
+{% endblock %}
 
 {% block title %}File Browser{% endblock %}
 

@@ -1,5 +1,5 @@
 {%extends "globus-portal-framework/v2/base.html"%}
-{% load static index_template %}
+{% load static index_template is_active %}
 
 {%block title%}Detail{%endblock%}
 
@@ -13,11 +13,16 @@
 {{block.super}}
 {% endblock %}
 
-{% block breadcrumb_items %}
-{{block.super}}
-<li class="breadcrumb-item">
-  <a class="h5" href="{% url 'search' globus_portal_framework.index %}">{{project_info.title}} Search</a>
-</li>
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+  {% block breadcrumb_items %}
+  <li class="breadcrumb-item">
+    <a class="h5" href="{% url 'index-selection' %}">Search</a>
+  </li>
+  {% endblock %}
+  </ol>
+</nav>
 {% endblock %}
 
 {% block body %}

@@ -33,17 +33,7 @@
     {% include base_nav %}
     {% endblock %}
 
-    {% block breadcrumbs %}
-    <nav aria-label="breadcrumb">
-      <ol class="breadcrumb">
-        {% block breadcrumb_items %}
-        <li class="breadcrumb-item {% is_active request 'index-selection' %}">
-          <a class="h5" href="{% url 'index-selection' %}">{{globus_portal_framework.project_title}}</a>
-        </li>
-        {% endblock %}
-      </ol>
-    </nav>
-    {% endblock %}
+    {% block breadcrumbs %}{% endblock %}
 
     {% block main_nav %}{% endblock %}
 

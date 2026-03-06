@@ -1,0 +1,36 @@
+{%extends "globus-portal-framework/v2/base.html"%}
+{% load static index_template is_active %}
+
+{%block title%}Search{%endblock%}
+
+{% block headextras %}
+{% block search_head %}
+<link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+{% endblock %}
+{{block.super}}
+{% endblock %}
+
+
+{% block main_nav %}
+  {% block search_nav %}
+  {% index_template 'globus-portal-framework/v2/components/search-nav.html' as search_nav %}
+  {% include search_nav %}
+  {% endblock %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% block breadcrumb_items %}
+    <li class="breadcrumb-item {% is_active request 'index-selection' %}">
+      <a class="h5" href="{% url 'index-selection' %}">Search</a>
+    </li>
+    {% endblock %}
+  </ol>
+</nav>
+{% endblock %}
+
+{% block body %}
+
+
+{%endblock%}
