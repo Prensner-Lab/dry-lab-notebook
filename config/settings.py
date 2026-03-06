@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dry_lab_notebook',
     'globus_portal_framework',
+    'social_django',
 ]
 
 MIDDLEWARE = [
@@ -40,6 +41,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'globus_portal_framework.middleware.ExpiredTokenMiddleware',
+    'globus_portal_framework.middleware.GlobusAuthExceptionMiddleware',
+    'social_django.middleware.SocialAuthExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -93,6 +97,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTHENTICATION_BACKENDS = [
+    'globus_portal_framework.auth.GlobusOpenIdConnect',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+SOCIAL_AUTH_GLOBUS_SCOPE = [
+    'urn:globus:auth:scope:search.api.globus.org:search',
+]
+
+LOGIN_URL = '/login/globus'
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

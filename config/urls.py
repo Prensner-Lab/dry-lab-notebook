@@ -28,4 +28,6 @@ urlpatterns = [
     path('browser/', views.FileBrowserView.as_view(), name='file-browser'),
     # Provides the basic search portal
     path('', include('globus_portal_framework.urls')),
+    # Provides Login urls for Globus Auth
+    path('', include('social_django.urls', namespace='social')),
 ]
