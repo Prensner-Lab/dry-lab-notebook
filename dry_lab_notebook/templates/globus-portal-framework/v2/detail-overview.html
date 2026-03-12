@@ -6,9 +6,17 @@
 <li class="breadcrumb-item">
   <a class="h5" href="{% url 'search' globus_portal_framework.index %}">{{globus_portal_framework.index_data.name}}</a>
 </li>
-<li class="breadcrumb-item active">
-  <a class="h5">{{title|default:'Result Details'}}</a>
+{% for name, path in dirs.items %}
+<li class="breadcrumb-item">
+  <a href="{% url 'search' globus_portal_framework.index %}?q={{ path }}">{{ name }}</a>
 </li>
+{% endfor %}
+{% with all|first as file %}
+<li class="breadcrumb-item">
+  <a>{{ file.name }}</a>
+</li>
+{% endwith %}
+
 {% endblock %}
 
 
@@ -17,30 +25,34 @@
 <div class="row">
   <div class="col-md-12">
 
-        {% block detail_search_content %}
-        {% if result.dc or result.files or result.project_metadata  %}
-        <h3 class="text-center mb-5">General Info</h3>
-        {% with all|first as result %}
-        <div class="row">
-          <div class="col-md-6">
-            {% include 'globus-portal-framework/v2/components/detail-dc-metadata.html' %}
-          </div>
-          <div class="col-md-6">
-            {% include 'globus-portal-framework/v2/components/detail-general-metadata.html' %}
-          </div>
-        </div>
-        {% endwith %}
+    {% block detail_search_content %}
 
-        {% else %}
+    {% with all|first as file %}
 
+    <table class="table table-striped table-bordered">
+      <thead>
+          <tr>
+              <th>Name</th>
+              <th>Size</th>
+              <th>Owner</th>
+              <th>Modified</th>
+              <th>Indexed</th>
+          </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td>{{ file.name }}</td>
+              <td>{{ file.size|filesizeformat }}</td>
+              <td>{{ file.user }}</td>
+              <td>{{ file.last_modified|date:"M d, Y H:i" }}</td>
+              <td>{{ file.date_indexed|date:"M d, Y H:i" }}</td>
+          </tr>
+      </tbody>
+    </table>
 
-        </p>
-        <h3 class="text-center mb-5">Default Detail Page</h3>
-        {% with all|first as project_metadata %}
-        {% include 'globus-portal-framework/v2/components/detail-general-metadata.html' %}
-        {% endwith %}
-        {% endif %}
-        {% endblock %}
+    {% endwith %}
+
+    {% endblock %}
 
 
   </div>
