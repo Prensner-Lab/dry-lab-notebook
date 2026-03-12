@@ -11,8 +11,8 @@ from urllib.parse import quote_plus, unquote, unquote_plus, urlencode
 from globus_portal_framework.gsearch import (
     get_template,
     get_index,
-    process_search_data,
-
+    get_facets, 
+    get_pagination
 )
 
 from globus_portal_framework.views.generic import SearchView as DGPFSearchView
@@ -44,8 +44,58 @@ def generate_globus_url(collection_id, path="/~/"):
     
     return f"{base_url}?{query_string}"
 
+def process_search_data(results):
+    """
+    Override `globus_portal_framework.gsearch.process_search_data`.
+    Remove `field_mappers` parameter and associated processing, e.g.
+    flattening and other steps given structure of dry-lab-notebook index.
+    May cause unforeseen issues with framework features not yet explored.
+    """
+    structured_results = []
+    for gmeta_result in results:
+
+        entries = gmeta_result['entries']
+        content = [e['content'] for e in entries]
+
+        content[0]["last_modified"] = datetime.fromisoformat(content[0]["last_modified"])
+        content[0]["date_indexed"] = datetime.fromisoformat(content[0]["date_indexed"])
+        result = {
+            'subject': quote_plus(gmeta_result['subject']),
+            'all': content
+        }
+
+        structured_results.append(result)
+    return structured_results
+
 
 class SearchView(DGPFSearchView):
+
+    def process_result(
+        self, index_info: t.Mapping[str, str], search_result: t.Mapping[str, str]
+    ) -> t.Mapping[str, str]:
+        """
+        Override parent class implementation. Called by `self.get_context_data`, which is called by `self.get`.
+        """
+        return {
+            "search": {
+                "search_results": process_search_data(
+                    search_result.data["gmeta"]
+                ),
+                "facets": get_facets(
+                    search_result,
+                    index_info.get("facets", []),
+                    self.filters,
+                    index_info.get("filter_match"),
+                    index_info.get("facet_modifiers"),
+                ),
+                "pagination": get_pagination(
+                    search_result.data["total"], search_result.data["offset"]
+                ),
+                "count": search_result.data["count"],
+                "offset": search_result.data["offset"],
+                "total": search_result.data["total"],
+            }
+        }
 
     def get_search_client(self) -> globus_sdk.SearchClient:
         '''
@@ -71,7 +121,7 @@ def get_subject(index, subject):
     try:
         idata = get_index(index)
         result = client.get_subject(idata['uuid'], unquote_plus(subject))
-        return process_search_data(idata.get('fields', {}), [result.data])[0]
+        return process_search_data([result.data])[0]
     except globus_sdk.SearchAPIError:
         return {'subject': subject, 'error': 'No data was found for subject'}
 
@@ -94,8 +144,6 @@ class DetailView(View):
         data['title'] = entry['name'] # special key used by template `detail-nav.html`
         path = Path(unquote(entry["path"]))
         data['globus_app_link'] = generate_globus_url(entry['collection'], str(path.parent))
-        entry["last_modified"] = datetime.fromisoformat(entry["last_modified"])
-        entry["date_indexed"] = datetime.fromisoformat(entry["date_indexed"])
         data["dirs"] = {name: "/" + "/".join(parts[:i+1]) for parts in [[pt for pt in str(path.parent).split('/') if pt]] for i, name in enumerate(parts)}
         return data
 
