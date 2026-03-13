@@ -1,2 +1,3 @@
 globus-sdk
 django-globus-portal-framework
+gunicorn

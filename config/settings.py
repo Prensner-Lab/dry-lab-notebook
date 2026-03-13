@@ -10,11 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DEBUG = os.environ.get("DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 ALLOWED_HOSTS = []
 
@@ -123,12 +125,43 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOCAL_FS_BASE = os.environ.get("LOCAL_FS_BASE", str(BASE_DIR))
+
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.environ.get("HOST")]
+CLIENT_ID = os.environ.get("CLIENT_ID")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
+SECRET_KEY = os.environ.get("SECRET_KEY")
+SOCIAL_AUTH_GLOBUS_KEY = os.environ.get("SOCIAL_AUTH_GLOBUS_KEY")
+SOCIAL_AUTH_GLOBUS_SECRET = os.environ.get("SOCIAL_AUTH_GLOBUS_SECRET")
+
+SEARCH_INDEXES = {
+    slug: {
+        'name': name,
+        'uuid': uuid,
+        'facets': [
+            {
+                'name': 'User',
+                'field_name': 'user'
+            },
+            {
+                'name': 'File extension',
+                'field_name': 'extension'
+            }
+        ]
+    }
+    for uuid, name, slug in [
+        (os.environ.get(f"INDEX_{i}_UUID"), os.environ.get(f"INDEX_{i}_NAME"), os.environ.get(f"INDEX_{i}_SLUG"))
+        for i in range(1, 10) if os.environ.get(f"INDEX_{i}_UUID") and os.environ.get(f"INDEX_{i}_NAME") and os.environ.get(f"INDEX_{i}_SLUG")
+    ]
+}
 
 # Override any settings here if a local_settings.py file exists
 try:
