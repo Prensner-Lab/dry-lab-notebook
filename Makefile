@@ -4,7 +4,11 @@ DEV = -f docker-compose.dev.yml
 
 .PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build prod-up prod-down
 
-dev-up:
+db.sqlite3:
+	@echo "WARNING: db.sqlite3 not found — creating empty file to prevent Docker mount issue."
+	@touch db.sqlite3
+
+dev-up: db.sqlite3
 	$(COMPOSE) $(BASE) $(DEV) up --build
 
 dev-down:
@@ -31,7 +35,7 @@ test:
 build:
 	podman build -t dry-lab-notebook .
 
-prod-up:
+prod-up: db.sqlite3
 	$(COMPOSE) $(BASE) up -d --build
 
 prod-down:
