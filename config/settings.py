@@ -135,6 +135,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOCAL_FS_BASE = os.environ.get("LOCAL_FS_BASE", str(BASE_DIR))
 
+PROJECT_TITLE = os.environ.get("PROJECT_TITLE", "Dry Lab Notebook")
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.environ.get("ALLOWED_HOST")]
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
