@@ -135,7 +135,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOCAL_FS_BASE = os.environ.get("LOCAL_FS_BASE", str(BASE_DIR))
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.environ.get("HOST")]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.environ.get("ALLOWED_HOST")]
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 SECRET_KEY = os.environ.get("SECRET_KEY")
