@@ -2,7 +2,7 @@ COMPOSE = podman compose
 BASE = -f docker-compose.yml
 DEV = -f docker-compose.dev.yml
 
-.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build prod-up prod-down
+.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build prod-up prod-down collectstatic
 
 db.sqlite3:
 	@echo "WARNING: db.sqlite3 not found — creating empty file to prevent Docker mount issue."
@@ -34,6 +34,11 @@ test:
 
 build:
 	podman build -t dry-lab-notebook .
+
+collectstatic:
+	sudo mkdir -p /var/www/dry-lab-notebook/staticfiles/
+	sudo chmod 777 /var/www/dry-lab-notebook/staticfiles/
+	podman compose run --rm -v /var/www/dry-lab-notebook/staticfiles:/app/staticfiles collectstatic
 
 prod-up: db.sqlite3
 	$(COMPOSE) $(BASE) up -d --build
