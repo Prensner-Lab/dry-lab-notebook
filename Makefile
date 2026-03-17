@@ -7,14 +7,14 @@ export
 
 STATICFILES_HOST_DIR ?= $(PWD)/staticfiles
 
-.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build staticfiles-host-dir image-check prod-up prod-down collectstatic
+.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build staticfiles-dir image-check prod-up prod-down collectstatic
 
 db.sqlite3:
 	@echo "WARNING: db.sqlite3 not found — creating empty file to prevent Docker mount issue."
 	@touch db.sqlite3
 
 dev-up: db.sqlite3
-	$(COMPOSE) $(BASE) $(DEV) up --build
+	$(COMPOSE) $(BASE) $(DEV) up
 
 dev-down:
 	$(COMPOSE) $(BASE) $(DEV) down
