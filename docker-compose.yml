@@ -10,7 +10,3 @@ services:
     env_file:
       - .env
     command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
-
-  collectstatic:
-    build: .
-    command: python manage.py collectstatic

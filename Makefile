@@ -2,7 +2,12 @@ COMPOSE = podman compose
 BASE = -f docker-compose.yml
 DEV = -f docker-compose.dev.yml
 
-.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build prod-up prod-down collectstatic
+-include .env
+export
+
+STATICFILES_HOST_DIR ?= $(PWD)/staticfiles
+
+.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build image-check prod-up prod-down collectstatic
 
 db.sqlite3:
 	@echo "WARNING: db.sqlite3 not found — creating empty file to prevent Docker mount issue."
@@ -35,13 +40,22 @@ test:
 build:
 	podman build -t dry-lab-notebook .
 
-collectstatic:
-	sudo mkdir -p /var/www/dry-lab-notebook/staticfiles/
-	sudo chmod 777 /var/www/dry-lab-notebook/staticfiles/
-	podman compose run --rm -v /var/www/dry-lab-notebook/staticfiles:/app/staticfiles collectstatic
+staticfiles-host-dir:
+	mkdir -p "$(STATICFILES_HOST_DIR)" || { echo "ERROR: Cannot create $(STATICFILES_HOST_DIR). Try running with sudo: sudo make $@"; exit 1; }
+	chmod 777 "$(STATICFILES_HOST_DIR)" || { echo "ERROR: Cannot chmod $(STATICFILES_HOST_DIR). Try running with sudo: sudo make $@"; exit 1; }
 
-prod-up: db.sqlite3
-	$(COMPOSE) $(BASE) up -d --build
+image-check:
+	@podman image exists dry-lab-notebook || \
+		{ echo "Image 'dry-lab-notebook' not found. Run: make build"; exit 1; }
+
+collectstatic: image-check staticfiles-host-dir
+	podman run --rm \
+		-v "$(STATICFILES_HOST_DIR):/app/staticfiles" \
+		dry-lab-notebook \
+		python manage.py collectstatic --noinput
+
+prod-up: image-check db.sqlite3
+	$(COMPOSE) $(BASE) up -d
 
 prod-down:
 	$(COMPOSE) $(BASE) down
