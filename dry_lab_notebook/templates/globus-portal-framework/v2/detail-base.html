@@ -13,16 +13,11 @@
 {{block.super}}
 {% endblock %}
 
-{% block breadcrumbs %}
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-  {% block breadcrumb_items %}
-  <li class="breadcrumb-item">
-    <a class="h5" href="{% url 'index-selection' %}">Search</a>
-  </li>
-  {% endblock %}
-  </ol>
-</nav>
+{% block breadcrumb_items %}
+{{block.super}}
+<li class="breadcrumb-item">
+  <a class="h5" href="{% url 'index-selection' %}">Search</a>
+</li>
 {% endblock %}
 
 {% block body %}

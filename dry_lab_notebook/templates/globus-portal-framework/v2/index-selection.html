@@ -9,8 +9,12 @@
 <nav aria-label="breadcrumb">
   <ol class="breadcrumb">
     {% block breadcrumb_items %}
+    {{block.super}}
     <li class="breadcrumb-item {% is_active request 'index-selection' %}">
-      <a class="h5" href="{% url 'index-selection' %}">Choose Index</a>
+      <a class="h5">Search</a>
+    </li>
+    <li class="breadcrumb-item {% is_active request 'index-selection' %}">
+      <a class="h5">Choose Index</a>
     </li>
     {% endblock %}
   </ol>

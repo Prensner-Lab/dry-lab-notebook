@@ -33,7 +33,17 @@
     {% include base_nav %}
     {% endblock %}
 
-    {% block breadcrumbs %}{% endblock %}
+    {% block breadcrumbs %}
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        {% block breadcrumb_items %}
+        <li class="breadcrumb-item {% is_active request 'index-selection' %}">
+          <a class="h5" href="/">Activities</a>
+        </li>
+        {% endblock %}
+      </ol>
+    </nav>
+    {% endblock %}
 
     {% block main_nav %}{% endblock %}
 

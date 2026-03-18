@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 
 import globus_portal_framework.urls  # Allows index converter usage
+from globus_portal_framework.views import index_selection
 
 from dry_lab_notebook import views
 
@@ -26,6 +27,8 @@ urlpatterns = [
     path("<index:index>/", views.SearchView.as_view(), name="search"),
     path("<index:index>/detail/<subject>/", views.DetailView.as_view(), name="subject-detail"),
     path('browser/', views.FileBrowserView.as_view(), name='file-browser'),
+    path('select-index/', index_selection, name='select-index'),
+    path('', views.ActivitiesView.as_view(), name='select-activity'),
     # Provides the basic search portal
     path('', include('globus_portal_framework.urls')),
     # Provides Login urls for Globus Auth

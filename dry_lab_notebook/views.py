@@ -195,3 +195,16 @@ class FileBrowserView(View):
         selected_files = request.POST.getlist('files')
         # Logic for processing selected files goes here
         return render(request, 'task_success.html', {'files': selected_files})
+    
+class ActivitiesView(View):
+
+    DEFAULT_TEMPLATE = "activity-selection.html"
+ 
+    def __init__(self, template=None):
+        super().__init__()
+        self.template = template or self.DEFAULT_TEMPLATE
+
+    def get(self, request: django.http.HttpRequest):
+        """Return a rendered main view, selecting the template with
+        globus_portal_framework.gsearch.get_template."""
+        return render(request, self.template)
