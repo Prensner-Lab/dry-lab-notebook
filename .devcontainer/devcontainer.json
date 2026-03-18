@@ -1,0 +1,43 @@
+{
+  "name": "dry-lab-notebook",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.yml"
+  ],
+  "service": "web",
+  "runServices": [
+    "web"
+  ],
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "overrideCommand": false,
+  "forwardPorts": [
+    8000
+  ],
+  "portsAttributes": {
+    "8000": {
+      "label": "Django dev server",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "batisteo.vscode-django",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
+        "python.analysis.indexing": true,
+        "python.analysis.exclude": ["**/node_modules", "**/static", "**/media"]
+      }
+    }
+  },
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-venv,target=/app/.venv,type=volume"
+  ],
+  "postCreateCommand": "python -m venv .venv && .venv/bin/pip install -r requirements.txt"
+}

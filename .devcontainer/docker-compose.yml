@@ -1,0 +1,17 @@
+services:
+  web:
+    container_name: dry-lab-notebook-devcontainer
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=1
+    mem_limit: 4G
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # Max 2 cores
+          memory: 4G      # Max 4GB RAM
+        reservations:
+          cpus: '0.5'     # Guaranteed 0.5 cores
+          memory: 1G      # Guaranteed 1GB RAM
+    command: sleep infinity
