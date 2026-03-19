@@ -234,13 +234,22 @@ class FileBrowserView(View):
         """Get directory and file listings for the given path"""
         collection = get_collection_endpoint(collection_key)
         items = []
+        current_dir_path = "/" + path.lstrip("/") if path else "/"
         if collection:
             transfer_client = get_transfer_client()
             res = transfer_client.operation_ls(collection['id'], path)
             items = res['DATA']
 
         dirs = [i['name'] for i in items if i['type'] == 'dir']
-        files = [i['name'] for i in items if i['type'] == 'file']
+        files = [
+            {
+                'name': i['name'],
+                'size': i.get('size'),
+                'user': i.get('user'),
+                'last_modified': datetime.fromisoformat(i.get('last_modified')),
+            }
+            for i in items if i['type'] == 'file'
+        ]
         
         stripped = path.rstrip('/')
         if stripped:
@@ -257,6 +266,7 @@ class FileBrowserView(View):
             'browser_dirs': get_path_map(path, suffix_slash=True),
             'current_collection': collection,
             'collection_query_key': collection.get('slug') if collection else '',
+            'globus_app_link': generate_globus_url(collection['id'], current_dir_path) if collection else '',
         }
     
     def get(self, request):

@@ -44,6 +44,14 @@
 
 {% block body %}
 <div class="container mt-4">
+    {% if globus_app_link %}
+    <div class="mb-3">
+        <a class="btn btn-outline-primary" href="{{ globus_app_link }}" target="_blank" rel="noopener noreferrer">
+            Open in Globus App
+        </a>
+    </div>
+    {% endif %}
+
     <div class="card mb-3">
         <div class="card-header">
             <button class="btn btn-link p-0 collapse-toggle" type="button" data-toggle="collapse" data-target="#dirsCollapse" aria-expanded="true" aria-controls="dirsCollapse">
@@ -80,7 +88,7 @@
         <div id="filesCollapse" class="collapse show">
             <div class="list-group list-group-flush">
                 {% for f in files %}
-                    <div class="list-group-item">📄 {{ f }}</div>
+                    {% include "components/file-item.html" with file=f %}
                 {% empty %}
                     <div class="list-group-item text-muted">No files in this directory</div>
                 {% endfor %}

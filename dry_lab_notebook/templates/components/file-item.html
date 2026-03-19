@@ -1,0 +1,14 @@
+<div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <span class="text-break">📄 {{ file.name }}</span>
+  <span class="d-flex text-muted small">
+    {% if file.size is not None %}
+      <span class="mr-3">Size: {{ file.size|filesizeformat }}</span>
+    {% endif %}
+    {% if file.user %}
+      <span class="mr-3">Owner: {{ file.user }}</span>
+    {% endif %}
+    {% if file.last_modified %}
+      <span>Modified: {{ file.last_modified|date:"M d, Y H:i" }}</span>
+    {% endif %}
+  </span>
+</div>
