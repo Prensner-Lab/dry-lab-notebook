@@ -13,8 +13,32 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import os
 from pathlib import Path
 
+
+def _load_dotenv(dotenv_path: Path) -> None:
+    if not dotenv_path.exists():
+        return
+
+    for raw_line in dotenv_path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key or key in os.environ:
+            continue
+
+        if ((value.startswith('"') and value.endswith('"')) or
+                (value.startswith("'") and value.endswith("'"))):
+            value = value[1:-1]
+
+        os.environ[key] = value
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+_load_dotenv(BASE_DIR / '.env')
 
 DEBUG = os.environ.get("DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -62,6 +86,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'globus_portal_framework.context_processors.globals',
+                'dry_lab_notebook.context_processors.globus_collections',
             ],
         },
     },
@@ -133,8 +158,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-LOCAL_FS_BASE = os.environ.get("LOCAL_FS_BASE", str(BASE_DIR))
-
 PROJECT_TITLE = os.environ.get("PROJECT_TITLE", "Dry Lab Notebook")
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.environ.get("ALLOWED_HOST")]
 CLIENT_ID = os.environ.get("CLIENT_ID")
@@ -161,6 +184,24 @@ SEARCH_INDEXES = {
     for uuid, name, slug in [
         (os.environ.get(f"INDEX_{i}_UUID"), os.environ.get(f"INDEX_{i}_NAME"), os.environ.get(f"INDEX_{i}_SLUG"))
         for i in range(1, 10) if os.environ.get(f"INDEX_{i}_UUID") and os.environ.get(f"INDEX_{i}_NAME") and os.environ.get(f"INDEX_{i}_SLUG")
+    ]
+}
+
+GLOBUS_COLLECTION_ENDPOINTS = {
+    slug: {
+        'name': name,
+        'id': endpoint_id,
+    }
+    for endpoint_id, name, slug in [
+        (
+            os.environ.get(f"COLLECTION_{i}_ID"),
+            os.environ.get(f"COLLECTION_{i}_NAME"),
+            os.environ.get(f"COLLECTION_{i}_SLUG"),
+        )
+        for i in range(1, 10)
+        if os.environ.get(f"COLLECTION_{i}_ID")
+        and os.environ.get(f"COLLECTION_{i}_NAME")
+        and os.environ.get(f"COLLECTION_{i}_SLUG")
     ]
 }
 

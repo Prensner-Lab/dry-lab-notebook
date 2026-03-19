@@ -1,0 +1,91 @@
+{% extends "globus-portal-framework/v2/base.html" %}
+{% load static is_active %}
+
+{%block headextras%}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+    <style>
+        .collapse-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .collapse-toggle .chevron {
+            display: inline-block;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .collapse-toggle[aria-expanded="false"] .chevron {
+            transform: rotate(-90deg);
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% block breadcrumb_items %}
+    {{block.super}}
+    <li class="breadcrumb-item">
+      <a class="h5" href="{% url 'select-collection' %}">Backup</a>
+    </li>
+    <li class="breadcrumb-item">
+            <a class="h5" href="?collection={{ collection_query_key }}&path=">{{ current_collection.name }}</a>
+    </li>
+        {% for name, path in browser_dirs.items %}
+    <li class="breadcrumb-item">
+            <a href="?collection={{ collection_query_key }}&path={{ path }}">{{ name }}</a>
+    </li>
+    {% endfor %}
+    {% endblock %}
+  </ol>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+    <div class="card mb-3">
+        <div class="card-header">
+            <button class="btn btn-link p-0 collapse-toggle" type="button" data-toggle="collapse" data-target="#dirsCollapse" aria-expanded="true" aria-controls="dirsCollapse">
+                <span class="chevron">▾</span>
+                <span>Directories</span>
+            </button>
+        </div>
+        <div id="dirsCollapse" class="collapse show">
+            <div class="list-group list-group-flush">
+                {% if current_path %}
+                    <a href="?collection={{ collection_query_key }}&path={{ parent_path }}" class="list-group-item list-group-item-action">
+                        📁 .. (Parent Directory)
+                    </a>
+                {% endif %}
+
+                {% for d in dirs %}
+                    <a href="?collection={{ collection_query_key }}&path={{ current_path }}{{ d }}/" class="list-group-item list-group-item-action">
+                        📁 {{ d }}
+                    </a>
+                {% empty %}
+                    <div class="list-group-item text-muted">No directories in this location</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <button class="btn btn-link p-0 collapse-toggle" type="button" data-toggle="collapse" data-target="#filesCollapse" aria-expanded="true" aria-controls="filesCollapse">
+                <span class="chevron">▾</span>
+                <span>Files</span>
+            </button>
+        </div>
+        <div id="filesCollapse" class="collapse show">
+            <div class="list-group list-group-flush">
+                {% for f in files %}
+                    <div class="list-group-item">📄 {{ f }}</div>
+                {% empty %}
+                    <div class="list-group-item text-muted">No files in this directory</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

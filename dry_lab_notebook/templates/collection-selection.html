@@ -1,0 +1,52 @@
+{%extends "globus-portal-framework/v2/base.html"%}
+{% load static is_active %}
+
+{%block headextras%}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% block breadcrumb_items %}
+    {{block.super}}
+    <li class="breadcrumb-item {% is_active request 'select-collection' %}">
+      <a class="h5">Backup</a>
+    </li>
+    <li class="breadcrumb-item {% is_active request 'select-collection' %}">
+      <a class="h5">Choose Collection</a>
+    </li>
+    {% endblock %}
+  </ol>
+</nav>
+{% endblock %}
+
+{% block body %}
+
+{% block list_collections %}
+{% for collection in globus_collection_endpoints %}
+<div class="row">
+  <div class="col"></div>
+  <div class="col-10">
+    {% block collection %}
+    <h2 class="text-center card card-body">
+      <a href="{% url 'browse-files' %}?collection={{ collection.slug|default:collection.id }}">{{ collection.name|default:collection.slug|default:collection.id }}</a>
+    </h2>
+    {% endblock %}
+  </div>
+  <div class="col"></div>
+</div>
+{% empty %}
+<div class="row">
+  <div class="col"></div>
+  <div class="col-10">
+    <div class="alert alert-warning" role="alert">
+      No collections are configured in <code>GLOBUS_COLLECTION_ENDPOINTS</code>.
+    </div>
+  </div>
+  <div class="col"></div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% endblock %}
