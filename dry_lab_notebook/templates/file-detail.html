@@ -1,0 +1,71 @@
+{% extends "globus-portal-framework/v2/base.html" %}
+{% load static is_active %}
+
+{%block headextras%}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    {% block breadcrumb_items %}
+    {{block.super}}
+    <li class="breadcrumb-item">
+      <a class="h5" href="{% url 'select-collection' %}">Backup</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a class="h5" href="{% url 'browse-files' %}?collection={{ collection_query_key }}&path=">{{ current_collection.name }}</a>
+    </li>
+    {% for name, path in browser_dirs.items %}
+    <li class="breadcrumb-item">
+      <a href="{% url 'browse-files' %}?collection={{ collection_query_key }}&path={{ path }}">{{ name }}</a>
+    </li>
+    {% endfor %}
+    <li class="breadcrumb-item active" aria-current="page">{{ file_name }}</li>
+    {% endblock %}
+  </ol>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+  <div class="mb-3 d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="{% url 'browse-files' %}?collection={{ collection_query_key }}&path={{ parent_path }}">
+      Back to Directory
+    </a>
+    {% if globus_app_link %}
+    <a class="btn btn-outline-primary" href="{{ globus_app_link }}" target="_blank" rel="noopener noreferrer">
+      Open in Globus App
+    </a>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">File Details</div>
+    <div class="card-body p-0">
+      {% if file %}
+      <table class="table table-striped table-bordered mb-0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Size</th>
+            <th>Owner</th>
+            <th>Modified</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{{ file.name }}</td>
+            <td>{% if file.size is not None %}{{ file.size|filesizeformat }}{% endif %}</td>
+            <td>{{ file.user }}</td>
+            <td>{% if file.last_modified %}{{ file.last_modified|date:"M d, Y H:i" }}{% endif %}</td>
+          </tr>
+        </tbody>
+      </table>
+      {% else %}
+      <div class="p-3 text-muted">File metadata could not be loaded.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

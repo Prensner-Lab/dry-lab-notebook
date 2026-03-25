@@ -281,6 +281,55 @@ class FileBrowserView(View):
         selected_files = request.POST.getlist('files')
         # Logic for processing selected files goes here
         return render(request, 'task_success.html', {'files': selected_files})
+
+
+class FileDetailView(View):
+    """File detail page integrated with Globus Portal Framework."""
+
+    DEFAULT_TEMPLATE = "file-detail.html"
+
+    def __init__(self, template=None):
+        super().__init__()
+        self.template = template or self.DEFAULT_TEMPLATE
+
+    def get_context_data(self, file_path: str = '', collection_key: str | None = None) -> dict:
+        collection = get_collection_endpoint(collection_key)
+        stripped_path = file_path.strip('/')
+
+        parent_path = ''
+        file_name = stripped_path
+        if '/' in stripped_path:
+            parent_dir, file_name = stripped_path.rsplit('/', 1)
+            parent_path = f"{parent_dir}/"
+
+        file_data = None
+        if collection and stripped_path:
+            transfer_client = get_transfer_client()
+            stat = transfer_client.operation_stat(collection['id'], stripped_path)
+            file_data = {
+                'name': stat.get('name', file_name),
+                'size': stat.get('size'),
+                'user': stat.get('user'),
+                'type': stat.get('type'),
+                'last_modified': datetime.fromisoformat(stat.get('last_modified')) if stat.get('last_modified') else None,
+            }
+
+        return {
+            'file': file_data,
+            'file_name': file_name,
+            'file_path': stripped_path,
+            'parent_path': parent_path,
+            'browser_dirs': get_path_map(parent_path, suffix_slash=True),
+            'current_collection': collection,
+            'collection_query_key': collection.get('slug') if collection else '',
+            'globus_app_link': generate_globus_url(collection['id'], f"/{stripped_path}") if collection and stripped_path else '',
+        }
+
+    def get(self, request):
+        file_path = request.GET.get('path', '')
+        collection_key = request.GET.get('collection')
+        context = self.get_context_data(file_path, collection_key)
+        return render(request, self.template, context)
     
 class ActivitiesView(View):
 
