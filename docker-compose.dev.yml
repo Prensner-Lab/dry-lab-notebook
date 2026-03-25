@@ -1,4 +1,12 @@
 services:
+  rabbitmq:
+    ports:
+      - "15670:15670" # web STOMP examples UI
+      - "15672:15672" # main UI
+      - "15674:15674" # web STOMP (web sockets)
+      - "15692:15692" # prometheus
+      - "61613:61613" # stomp
+
   web:
     volumes:
       - .:/app

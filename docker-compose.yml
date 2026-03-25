@@ -1,4 +1,17 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672"
+      - "15674:15674"
+      - "61613:61613"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq_enabled_plugins:/etc/rabbitmq/enabled_plugins
+
   web:
     build: .
     ports:
@@ -7,6 +20,12 @@ services:
       - ./db.sqlite3:/app/db.sqlite3
     environment:
       - DEBUG=0
+      - RABBITMQ_URL=stomp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:61613
     env_file:
       - .env
+    depends_on:
+      - rabbitmq
     command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+
+volumes:
+  rabbitmq_data:
