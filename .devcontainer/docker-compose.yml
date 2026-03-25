@@ -1,10 +1,34 @@
 services:
-  web:
-    container_name: dry-lab-notebook-devcontainer
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15670:15670" # web STOMP examples UI
+      - "15682:15672" # main UI (shifted for dev)
+      - "15684:15674" # web STOMP (web sockets, shifted for dev)
+      - "15692:15692" # prometheus
+      - "61614:61613" # stomp (shifted for dev)
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
     volumes:
-      - .:/app
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ../rabbitmq_enabled_plugins:/etc/rabbitmq/enabled_plugins
+
+  web:
+    build:
+      context: ..
+    container_name: dry-lab-notebook-devcontainer
+    ports:
+      - "8000:8000"
+    volumes:
+      - ..:/app
     environment:
       - DEBUG=1
+      - RABBITMQ_URL=stomp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:61613
+    env_file:
+      - ../.env
+    depends_on:
+      - rabbitmq
     mem_limit: 4G
     deploy:
       resources:
@@ -14,4 +38,6 @@ services:
         reservations:
           cpus: '0.5'     # Guaranteed 0.5 cores
           memory: 1G      # Guaranteed 1GB RAM
-    command: sleep infinity
+
+volumes:
+  rabbitmq_data:

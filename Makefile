@@ -1,6 +1,6 @@
 COMPOSE = podman compose
-BASE = -f docker-compose.yml
-DEV = -f docker-compose.dev.yml
+PROJECT_NAME ?= dry-lab-notebook-prod
+BASE = -p $(PROJECT_NAME) -f docker-compose.yml
 
 -include .env
 export
@@ -14,28 +14,32 @@ db.sqlite3:
 	@touch db.sqlite3
 
 dev-up: db.sqlite3
-	$(COMPOSE) $(BASE) $(DEV) up
+	@echo "Dev workflow has been consolidated into the VS Code devcontainer."
+	@echo "Open this workspace in the devcontainer to run the development stack."
 
 dev-down:
-	$(COMPOSE) $(BASE) $(DEV) down
+	@echo "Dev workflow has been consolidated into the VS Code devcontainer."
+	@echo "Use 'Dev Containers: Rebuild and Reopen in Container' / 'Reopen Locally' from VS Code."
 
 dev-logs:
-	$(COMPOSE) $(BASE) $(DEV) logs -f web
+	@echo "Dev workflow has been consolidated into the VS Code devcontainer."
+	@echo "Use the devcontainer terminal and Docker/Podman logs for the dev stack."
 
 dev-shell:
-	$(COMPOSE) $(BASE) $(DEV) exec web /bin/sh
+	@echo "Dev workflow has been consolidated into the VS Code devcontainer."
+	@echo "Use the integrated terminal inside the devcontainer."
 
 migrate:
-	$(COMPOSE) $(BASE) $(DEV) exec web python manage.py migrate
+	$(COMPOSE) $(BASE) exec web python manage.py migrate
 
 makemigrations:
-	$(COMPOSE) $(BASE) $(DEV) exec web python manage.py makemigrations
+	$(COMPOSE) $(BASE) exec web python manage.py makemigrations
 
 createsuperuser:
-	$(COMPOSE) $(BASE) $(DEV) exec web python manage.py createsuperuser
+	$(COMPOSE) $(BASE) exec web python manage.py createsuperuser
 
 test:
-	$(COMPOSE) $(BASE) $(DEV) exec web python manage.py test
+	$(COMPOSE) $(BASE) exec web python manage.py test
 
 build:
 	podman build -t dry-lab-notebook .

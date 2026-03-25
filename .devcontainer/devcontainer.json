@@ -1,23 +1,28 @@
 {
   "name": "dry-lab-notebook",
   "dockerComposeFile": [
-    "../docker-compose.yml",
     "docker-compose.yml"
   ],
   "service": "web",
   "runServices": [
-    "web"
+    "web",
+    "rabbitmq"
   ],
   "workspaceFolder": "/app",
   "shutdownAction": "stopCompose",
-  "overrideCommand": false,
+  "overrideCommand": true,
   "forwardPorts": [
-    8000
+    8000,
+    15682
   ],
   "portsAttributes": {
     "8000": {
       "label": "Django dev server",
       "onAutoForward": "notify"
+    },
+    "15682": {
+      "label": "RabbitMQ management (dev)",
+      "onAutoForward": "silent"
     }
   },
   "customizations": {
