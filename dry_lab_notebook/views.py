@@ -355,3 +355,15 @@ class CollectionSelectionView(View):
 
     def get(self, request: django.http.HttpRequest):
         return render(request, self.template)
+
+
+class StompLogsView(View):
+
+    DEFAULT_TEMPLATE = "stomp-logs.html"
+
+    def __init__(self, template=None):
+        super().__init__()
+        self.template = template or self.DEFAULT_TEMPLATE
+
+    def get(self, request: django.http.HttpRequest):
+        return render(request, self.template)

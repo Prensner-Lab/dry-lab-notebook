@@ -1,0 +1,153 @@
+{%extends "globus-portal-framework/v2/base.html"%}
+{% load static is_active %}
+
+{%block headextras%}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+{% endblock %}
+
+{% block breadcrumbs %}{{block.super}}{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-12">
+      <h2 class="mb-3">Broker Logs (STOMP)</h2>
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label for="brokerUrl">Broker WebSocket URL</label>
+              <input id="brokerUrl" class="form-control" type="text" value="ws://localhost:15674/ws" />
+            </div>
+            <div class="form-group col-md-6">
+              <label for="destination">Destination (topic/queue)</label>
+              <input id="destination" class="form-control" type="text" value="/topic/logs" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-md-3">
+              <label for="login">Login</label>
+              <input id="login" class="form-control" type="text" value="guest" />
+            </div>
+            <div class="form-group col-md-3">
+              <label for="passcode">Passcode</label>
+              <input id="passcode" class="form-control" type="password" value="guest" />
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="connectBtn" class="btn btn-primary" type="button">Connect</button>
+            <button id="disconnectBtn" class="btn btn-outline-secondary" type="button" disabled>Disconnect</button>
+            <button id="clearBtn" class="btn btn-outline-secondary" type="button">Clear</button>
+          </div>
+          <p id="connectionStatus" class="mt-3 mb-0 text-muted">Disconnected</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Live Messages</div>
+        <div class="card-body p-0">
+          <pre id="logOutput" class="m-0 p-3" style="max-height: 50vh; overflow: auto;"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@stomp/stompjs@7.2.0/bundles/stomp.umd.min.js"></script>
+<script>
+  (() => {
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const brokerUrlInput = document.getElementById('brokerUrl');
+    const destinationInput = document.getElementById('destination');
+    const loginInput = document.getElementById('login');
+    const passcodeInput = document.getElementById('passcode');
+    const status = document.getElementById('connectionStatus');
+    const logOutput = document.getElementById('logOutput');
+
+    let client = null;
+    let subscription = null;
+
+    function appendLog(message) {
+      const timestamp = new Date().toISOString();
+      logOutput.textContent += `[${timestamp}] ${message}\n`;
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+
+    function setConnectedState(isConnected) {
+      connectBtn.disabled = isConnected;
+      disconnectBtn.disabled = !isConnected;
+      brokerUrlInput.disabled = isConnected;
+      destinationInput.disabled = isConnected;
+      loginInput.disabled = isConnected;
+      passcodeInput.disabled = isConnected;
+      status.textContent = isConnected ? 'Connected' : 'Disconnected';
+    }
+
+    connectBtn.addEventListener('click', () => {
+      const brokerURL = brokerUrlInput.value.trim();
+      const destination = destinationInput.value.trim();
+
+      if (!brokerURL || !destination) {
+        appendLog('Broker URL and destination are required.');
+        return;
+      }
+
+      client = new StompJs.Client({
+        brokerURL,
+        connectHeaders: {
+          login: loginInput.value,
+          passcode: passcodeInput.value,
+        },
+        reconnectDelay: 3000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+      });
+
+      client.onConnect = () => {
+        setConnectedState(true);
+        appendLog(`Connected to ${brokerURL}`);
+        subscription = client.subscribe(destination, (message) => {
+          appendLog(message.body);
+        });
+        appendLog(`Subscribed to ${destination}`);
+      };
+
+      client.onStompError = (frame) => {
+        appendLog(`Broker error: ${frame.headers['message'] || 'unknown error'}`);
+      };
+
+      client.onWebSocketError = (event) => {
+        appendLog(`WebSocket error: ${event.type || 'error'}`);
+      };
+
+      client.onWebSocketClose = () => {
+        setConnectedState(false);
+        appendLog('Connection closed.');
+      };
+
+      client.activate();
+      status.textContent = 'Connecting...';
+      appendLog(`Connecting to ${brokerURL} ...`);
+    });
+
+    disconnectBtn.addEventListener('click', async () => {
+      if (subscription) {
+        subscription.unsubscribe();
+        subscription = null;
+      }
+      if (client) {
+        await client.deactivate();
+        client = null;
+      }
+      setConnectedState(false);
+      appendLog('Disconnected.');
+    });
+
+    clearBtn.addEventListener('click', () => {
+      logOutput.textContent = '';
+    });
+  })();
+</script>
+{% endblock %}

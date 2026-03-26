@@ -28,6 +28,7 @@ urlpatterns = [
     path("<index:index>/detail/<subject>/", views.DetailView.as_view(), name="subject-detail"),
     path('browse-files/', views.FileBrowserView.as_view(), name='browse-files'),
     path('file-detail/', views.FileDetailView.as_view(), name='file-detail'),
+    path('stomp-logs/', views.StompLogsView.as_view(), name='stomp-logs'),
     path('select-collection/', views.CollectionSelectionView.as_view(), name='select-collection'),
     path('select-index/', index_selection, name='select-index'),
     path('', views.ActivitiesView.as_view(), name='select-activity'),
