@@ -302,6 +302,12 @@
           || parsed?.source?.workingDirectory
       );
       const workflow = basenamePath(workingDirectory) || fallbackWorkflow;
+      const producer = safeValue(
+        parsed.producer
+          || parsed?.event_details?.producer
+          || parsed?.source?.producer
+          || message.headers['x-producer']
+      );
       const eventType = normalizeEventType(parsed.event_type || parsed.type || parsed.event || 'LOG');
       const level = safeValue(
         parsed.level
@@ -325,6 +331,7 @@
         workflowId,
         workflow,
         workingDirectory,
+        producer,
         level,
         eventType,
         rule: safeValue(parsed.rule_name || parsed.rule || parsed.job_rule || parsed?.payload?.name),
@@ -587,6 +594,7 @@
         button.appendChild(headerRow);
         button.appendChild(identifier);
         button.appendChild(createRunMetaLine(`started ${startedAge} ago | last event ${lastEventAge} ago`));
+        button.appendChild(createRunMetaLine(`producer=${safeValue(run.producer, '--')}`));
 
         if (run.terminalStatus) {
           button.appendChild(createRunMetaLine(`terminal=${run.terminalStatus} @ ${safeValue(run.terminalAt, '--')}`));
@@ -608,6 +616,7 @@
       const current = liveRuns.get(event.workflowId) || {
         workflowId: event.workflowId,
         workflow: event.workflow,
+        producer: event.producer,
         workflowStartTimestamp: event.workflowStartTimestamp,
         lastSeenAt: event.timestamp,
         lastHeartbeatAt: event.timestamp,
@@ -618,8 +627,9 @@
         terminalAt: '',
       };
 
-        current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
-        current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
+      current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
+      current.producer = event.producer || current.producer;
+      current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
       current.lastSeenAt = event.timestamp;
       current.lastHeartbeatAt = event.timestamp;
       current.heartbeatIntervalSeconds = event.heartbeatIntervalSeconds || current.heartbeatIntervalSeconds;
@@ -633,6 +643,7 @@
       const current = liveRuns.get(event.workflowId) || {
         workflowId: event.workflowId,
         workflow: event.workflow,
+        producer: event.producer,
         workflowStartTimestamp: event.workflowStartTimestamp,
         lastSeenAt: event.timestamp,
         lastHeartbeatAt: '',
@@ -643,8 +654,9 @@
         terminalAt: '',
       };
 
-        current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
-        current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
+      current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
+      current.producer = event.producer || current.producer;
+      current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
       current.lastSeenAt = event.timestamp;
       current.lastStreamOffset = event.streamOffset || current.lastStreamOffset;
       current.lastDestination = event.destination || current.lastDestination;
