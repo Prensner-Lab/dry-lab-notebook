@@ -354,7 +354,7 @@ class CollectionSelectionView(View):
         self.template = template or self.DEFAULT_TEMPLATE
 
     def get(self, request: django.http.HttpRequest):
-        return render(request, self.template)
+        return render(request, self.template, self.get_context_data())
 
 
 class StompLogsView(View):
@@ -365,5 +365,10 @@ class StompLogsView(View):
         super().__init__()
         self.template = template or self.DEFAULT_TEMPLATE
 
+    def get_context_data(self):
+        return {
+            "STOMP_STREAM_QUEUE": settings.STOMP_STREAM_QUEUE,
+        }
+
     def get(self, request: django.http.HttpRequest):
-        return render(request, self.template)
+        return render(request, self.template, self.get_context_data())

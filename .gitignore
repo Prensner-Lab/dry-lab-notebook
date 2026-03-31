@@ -1,3 +1,7 @@
+.snakemake
+live_tests/snakemake/results
+workflow-events.jsonl
+
 staticfiles
 
 # Byte-compiled / optimized / DLL files

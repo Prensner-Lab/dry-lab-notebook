@@ -166,6 +166,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 SOCIAL_AUTH_GLOBUS_KEY = os.environ.get("SOCIAL_AUTH_GLOBUS_KEY")
 SOCIAL_AUTH_GLOBUS_SECRET = os.environ.get("SOCIAL_AUTH_GLOBUS_SECRET")
 
+STOMP_STREAM_QUEUE = os.environ.get("STOMP_STREAM_QUEUE", "/queue/snakemake.events")
+
 SEARCH_INDEXES = {
     slug: {
         'name': name,

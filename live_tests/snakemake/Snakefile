@@ -1,0 +1,28 @@
+rule all:
+    input:
+        "results/final.txt"
+
+
+rule step_one:
+    output:
+        "results/step1.txt"
+    shell:
+        "mkdir -p results && sleep 10 && echo step_one > {output}"
+
+
+rule step_two:
+    input:
+        "results/step1.txt"
+    output:
+        "results/step2.txt"
+    shell:
+        "sleep 10 && cat {input} > {output}"
+
+
+rule finalize:
+    input:
+        "results/step2.txt"
+    output:
+        "results/final.txt"
+    shell:
+        "sleep 10 && cat {input} > {output}"

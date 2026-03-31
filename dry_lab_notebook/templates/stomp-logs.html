@@ -11,42 +11,85 @@
 <div class="container mt-4">
   <div class="row">
     <div class="col-12">
-      <h2 class="mb-3">Broker Logs (STOMP)</h2>
-      <div class="card mb-3">
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-group col-md-6">
-              <label for="brokerUrl">Broker WebSocket URL</label>
-              <input id="brokerUrl" class="form-control" type="text" value="ws://localhost:15674/ws" />
-            </div>
-            <div class="form-group col-md-6">
-              <label for="destination">Destination (topic/queue)</label>
-              <input id="destination" class="form-control" type="text" value="/topic/logs" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group col-md-3">
-              <label for="login">Login</label>
-              <input id="login" class="form-control" type="text" value="guest" />
-            </div>
-            <div class="form-group col-md-3">
-              <label for="passcode">Passcode</label>
-              <input id="passcode" class="form-control" type="password" value="guest" />
-            </div>
-          </div>
-          <div class="d-flex gap-2">
-            <button id="connectBtn" class="btn btn-primary" type="button">Connect</button>
-            <button id="disconnectBtn" class="btn btn-outline-secondary" type="button" disabled>Disconnect</button>
-            <button id="clearBtn" class="btn btn-outline-secondary" type="button">Clear</button>
-          </div>
-          <p id="connectionStatus" class="mt-3 mb-0 text-muted">Disconnected</p>
-        </div>
+      <div class="d-flex align-items-center mb-3">
+        <h2 class="mb-0 mr-3">Snakemake logs</h2>
+        <span id="brokerIndicator" class="badge badge-secondary">connecting&hellip;</span>
+        <small id="brokerQueue" class="text-muted ml-2"></small>
+      </div>
+      <div id="connectionError" class="alert alert-danger d-none mb-3" role="alert">
+        <span id="connectionErrorMsg"></span>
+        <button type="button" class="close ml-3" onclick="document.getElementById('connectionError').classList.add('d-none')" aria-label="Dismiss"><span aria-hidden="true">&times;</span></button>
       </div>
 
-      <div class="card">
-        <div class="card-header">Live Messages</div>
-        <div class="card-body p-0">
-          <pre id="logOutput" class="m-0 p-3" style="max-height: 50vh; overflow: auto;"></pre>
+      <div class="row">
+        <div class="col-lg-4 mb-3">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span>Recent Workflows</span>
+              <div class="d-flex align-items-center">
+                <span id="runCountBadge" class="badge badge-secondary mr-2">0</span>
+                <button id="clearBtn" class="btn btn-outline-secondary btn-sm" type="button">Clear</button>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="p-3 border-bottom">
+                <label for="liveInterval" class="mb-1">Past Interval</label>
+                <select id="liveInterval" class="form-control form-control-sm mb-2">
+                  <option value="900">Last 15 minutes</option>
+                  <option value="3600" selected>Last 1 hour</option>
+                  <option value="21600">Last 6 hours</option>
+                  <option value="86400">Last 24 hours</option>
+                </select>
+                <label for="workflowFilter" class="mb-1">Workflow Filter</label>
+                <select id="workflowFilter" class="form-control form-control-sm">
+                  <option value="">All Workflows</option>
+                </select>
+              </div>
+              <div id="runList" class="list-group list-group-flush" style="max-height: 45vh; overflow: auto;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8 mb-3">
+          <div class="card h-100">
+            <div class="card-header">
+              <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <span>Workflow Logs</span>
+                <span id="selectedRunLabel" class="badge badge-info">No workflow selected</span>
+              </div>
+            </div>
+            <div class="card-body p-2 border-bottom">
+              <div class="form-row align-items-end">
+                <div class="form-group col-md-3 mb-2">
+                  <button id="showFromBeginningBtn" class="btn btn-outline-secondary btn-sm btn-block" type="button">Show from beginning</button>
+                </div>
+                <div class="form-group col-md-3 mb-2">
+                  <label for="levelFilter" class="mb-1">Level</label>
+                  <select id="levelFilter" class="form-control form-control-sm">
+                    <option value="">All</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group col-md-3 mb-2">
+                  <label for="ruleFilter" class="mb-1">Rule</label>
+                  <input id="ruleFilter" class="form-control form-control-sm" type="text" placeholder="rule name" />
+                </div>
+                <div class="form-group col-md-9 mb-2">
+                  <label for="messageFilter" class="mb-1">Search Message</label>
+                  <input id="messageFilter" class="form-control form-control-sm" type="text" placeholder="contains text" />
+                </div>
+              </div>
+              <small id="offsetHelp" class="text-muted">New log selections start from the next event. Use "Show from beginning" to replay the selected workflow.</small>
+            </div>
+            <div class="card-body p-0">
+              <pre id="logOutput" class="m-0 p-3" style="max-height: 50vh; overflow: auto;"></pre>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -56,49 +99,738 @@
 <script src="https://unpkg.com/@stomp/stompjs@7.2.0/bundles/stomp.umd.min.js"></script>
 <script>
   (() => {
-    const connectBtn = document.getElementById('connectBtn');
-    const disconnectBtn = document.getElementById('disconnectBtn');
+    const STREAM_DESTINATION = '{{ STOMP_STREAM_QUEUE|default:"/queue/snakemake.events" }}';
+    const DEFAULT_LOG_START = 'next';
+    const MAX_LOG_EVENTS = 2000;
+    const BROKER_LOGIN = 'guest';
+    const BROKER_PASSCODE = 'guest';
+    const LIVE_PREFETCH_COUNT = '50';
+    const LOG_PREFETCH_COUNT = '250';
+    const HEARTBEAT_REFRESH_MS = 1000;
+
+    function resolveBrokerUrl() {
+      const hostname = window.location.hostname;
+      const isLocalDevHost = hostname === 'localhost' || hostname === '127.0.0.1';
+      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      const port = isLocalDevHost ? 15684 : 15674;
+      const targetHost = isLocalDevHost ? 'localhost' : hostname;
+      return `${scheme}://${targetHost}:${port}/ws`;
+    }
+
     const clearBtn = document.getElementById('clearBtn');
-    const brokerUrlInput = document.getElementById('brokerUrl');
-    const destinationInput = document.getElementById('destination');
-    const loginInput = document.getElementById('login');
-    const passcodeInput = document.getElementById('passcode');
-    const status = document.getElementById('connectionStatus');
+    const showFromBeginningBtn = document.getElementById('showFromBeginningBtn');
+    const connectionError = document.getElementById('connectionError');
+    const connectionErrorMsg = document.getElementById('connectionErrorMsg');
+    const brokerIndicator = document.getElementById('brokerIndicator');
+    const brokerQueue = document.getElementById('brokerQueue');
+    const offsetHelp = document.getElementById('offsetHelp');
+    const liveInterval = document.getElementById('liveInterval');
+    const workflowFilter = document.getElementById('workflowFilter');
+    const levelFilter = document.getElementById('levelFilter');
+    const ruleFilter = document.getElementById('ruleFilter');
+    const messageFilter = document.getElementById('messageFilter');
+    const runList = document.getElementById('runList');
+    const runCountBadge = document.getElementById('runCountBadge');
+    const selectedRunLabel = document.getElementById('selectedRunLabel');
     const logOutput = document.getElementById('logOutput');
 
     let client = null;
-    let subscription = null;
+    let liveSubscriptions = [];
+    let logSubscriptions = [];
+    let selectedWorkflowId = null;
+    let appliedLogOffset = 'next';
 
-    function appendLog(message) {
-      const timestamp = new Date().toISOString();
-      logOutput.textContent += `[${timestamp}] ${message}\n`;
+    const liveRuns = new Map();
+    const selectedRunLogs = [];
+
+    const streamCounts = {
+      received: 0,
+      parsed: 0,
+      raw: 0,
+      live: 0,
+      logs: 0,
+    };
+
+    function showConnectionError(message) {
+      connectionErrorMsg.textContent = message;
+      connectionError.classList.remove('d-none');
+      brokerIndicator.className = 'badge badge-danger';
+      brokerIndicator.textContent = 'disconnected';
+    }
+
+    function hideConnectionError() {
+      connectionError.classList.add('d-none');
+      connectionErrorMsg.textContent = '';
+    }
+
+    function parseDestinations(value) {
+      return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function getInvalidDestinations(destinations) {
+      return destinations.filter((destination) => !isQueueDestination(destination));
+    }
+
+    function isQueueDestination(destination) {
+      const normalized = safeValue(destination).toLowerCase();
+      return normalized.startsWith('/queue/') || normalized.startsWith('/amq/queue/');
+    }
+
+    function toPassiveDestination(destination) {
+      const d = safeValue(destination);
+      if (d.toLowerCase().startsWith('/queue/')) {
+        return '/amq/queue/' + d.slice('/queue/'.length);
+      }
+      return d;
+    }
+
+    function toIsoTimestamp(value) {
+      if (!value) {
+        return new Date().toISOString();
+      }
+
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+    }
+
+    function safeValue(value, fallback = '') {
+      return value === undefined || value === null ? fallback : String(value);
+    }
+
+    function parseNumeric(value) {
+      if (value === undefined || value === null || value === '') {
+        return null;
+      }
+
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function basenamePath(pathValue) {
+      const normalized = safeValue(pathValue).replace(/\\/g, '/').replace(/\/+$/, '');
+      if (!normalized) {
+        return '';
+      }
+
+      const segments = normalized.split('/').filter(Boolean);
+      return segments.length ? segments[segments.length - 1] : '';
+    }
+
+    function getLiveIntervalSeconds() {
+      const parsed = Number.parseInt(liveInterval.value, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 3600;
+    }
+
+    function getLiveWindowCutoffMs() {
+      return Date.now() - (getLiveIntervalSeconds() * 1000);
+    }
+
+    function runIsInsideLiveWindow(run) {
+      const cutoff = getLiveWindowCutoffMs();
+      const candidateTimes = [
+        run.lastHeartbeatAt,
+        run.lastSeenAt,
+        run.terminalAt,
+      ];
+
+      return candidateTimes.some((ts) => {
+        const t = new Date(ts || 0).getTime();
+        return Number.isFinite(t) && t >= cutoff;
+      });
+    }
+
+    function normalizeEventType(value) {
+      return safeValue(value, 'LOG').replace(/\s+/g, '_').replace(/-/g, '_').toUpperCase();
+    }
+
+    function mapEventTypeToTerminalStatus(eventType) {
+      if (eventType.includes('WORKFLOW_FINISHED') || eventType.includes('WORKFLOW_COMPLETED')) {
+        return 'completed';
+      }
+      if (eventType.includes('WORKFLOW_FAILED') || eventType.includes('JOB_ERROR') || eventType.includes('ERROR')) {
+        return 'failed';
+      }
+      return null;
+    }
+
+    function isHeartbeatEvent(event) {
+      return event.eventType === 'CONSUMER_HEARTBEAT' || event.heartbeat === true;
+    }
+
+    function parseStructuredEvent(message) {
+      let parsed;
+
+      try {
+        parsed = JSON.parse(message.body);
+      } catch (error) {
+        return null;
+      }
+
+      const workflowId = safeValue(
+        parsed.workflow_id
+          || parsed.workflowId
+          || parsed?.source?.workflow_id
+          || parsed?.source?.workflowId
+          || parsed?.event_details?.workflow_id
+          || message.headers['x-workflow-id']
+      );
+
+      if (!workflowId) {
+        return null;
+      }
+
+      const fallbackWorkflow = safeValue(
+        parsed.workflow_name
+          || parsed.workflow
+          || parsed.pipeline
+          || parsed?.event_details?.workflow_name
+          || parsed?.source?.workflow_name
+          || workflowId
+          || parsed?.source?.workflow_id
+          || message.headers['x-workflow'],
+        workflowId
+      );
+      const workingDirectory = safeValue(
+        parsed.working_directory
+          || parsed.workingDirectory
+          || parsed?.event_details?.working_directory
+          || parsed?.event_details?.workingDirectory
+          || parsed?.source?.working_directory
+          || parsed?.source?.workingDirectory
+      );
+      const workflow = basenamePath(workingDirectory) || fallbackWorkflow;
+      const eventType = normalizeEventType(parsed.event_type || parsed.type || parsed.event || 'LOG');
+      const level = safeValue(
+        parsed.level
+          || parsed.severity
+          || parsed?.payload?.level
+          || message.headers['x-level'],
+        'INFO'
+      ).toUpperCase();
+      const heartbeatIntervalSeconds = parseNumeric(parsed.heartbeat_interval_seconds);
+      const rawWorkflowStartTimestamp = (
+        parsed.workflow_start_timestamp
+          || parsed.workflowStartTimestamp
+          || parsed?.event_details?.workflow_start_timestamp
+          || parsed?.event_details?.workflowStartTimestamp
+      );
+      const workflowStartTimestamp = rawWorkflowStartTimestamp
+        ? toIsoTimestamp(rawWorkflowStartTimestamp)
+        : '';
+
+      return {
+        workflowId,
+        workflow,
+        workingDirectory,
+        level,
+        eventType,
+        rule: safeValue(parsed.rule_name || parsed.rule || parsed.job_rule || parsed?.payload?.name),
+        jobId: safeValue(parsed.job_id || parsed.job || parsed.task_id || parsed?.payload?.jobid),
+        timestamp: toIsoTimestamp(parsed.event_ts || parsed.event_time || parsed.timestamp || parsed.ts),
+        message: safeValue(parsed.message || parsed.msg || parsed.log || parsed?.payload?.msg || parsed.body || ''),
+        summary: safeValue(parsed.summary || parsed?.event_details?.summary || ''),
+        destination: safeValue(message.headers.destination, ''),
+        sourceType: safeValue(parsed.source_type || parsed.source_type || parsed?.source?.agent_id || parsed.source || 'workflow'),
+        streamOffset: safeValue(message.headers['x-stream-offset'] || message.headers['x-stream-offset'.toLowerCase()], ''),
+        heartbeat: Boolean(parsed.heartbeat) || eventType === 'CONSUMER_HEARTBEAT',
+        workflowStartTimestamp,
+        heartbeatIntervalSeconds,
+        terminalStatus: mapEventTypeToTerminalStatus(eventType),
+      };
+    }
+
+    function acknowledgeMessage(message) {
+      const ackToken = message?.headers?.ack;
+      if (!ackToken || typeof message.ack !== 'function') {
+        return;
+      }
+
+      try {
+        message.ack();
+      } catch (error) {
+        console.warn('Failed to acknowledge STOMP message', error);
+      }
+    }
+
+    function formatTime(isoTimestamp) {
+      try {
+        return new Date(isoTimestamp).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        });
+      } catch {
+        return '--:--:--';
+      }
+    }
+
+    function formatDuration(ms) {
+      if (!Number.isFinite(ms) || ms < 0) {
+        return '--';
+      }
+
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+      }
+      return `${seconds}s`;
+    }
+
+    function updateOffsetHelp() {
+      if (appliedLogOffset === 'first') {
+        offsetHelp.textContent = 'Showing the selected workflow from the beginning of the stream.';
+        return;
+      }
+
+      offsetHelp.textContent = 'New log selections start from the next event. Use "Show from beginning" to replay the selected workflow.';
+    }
+
+    function getRunSortTimestamp(run) {
+      return new Date(run.lastHeartbeatAt || run.terminalAt || run.lastSeenAt || 0).getTime();
+    }
+
+    function getRunLastEventTimestamp(run) {
+      const candidateTimes = [run.lastSeenAt, run.lastHeartbeatAt, run.terminalAt]
+        .map((ts) => new Date(ts || 0).getTime())
+        .filter((ts) => Number.isFinite(ts) && ts > 0);
+
+      if (!candidateTimes.length) {
+        return 0;
+      }
+
+      return Math.max(...candidateTimes);
+    }
+
+    function computeRunStatus(run) {
+      if (run.terminalStatus === 'completed') {
+        return 'completed';
+      }
+      if (run.terminalStatus === 'failed') {
+        return 'failed';
+      }
+
+      const intervalSeconds = parseNumeric(run.heartbeatIntervalSeconds);
+      const lastHeartbeatMs = new Date(run.lastHeartbeatAt || 0).getTime();
+      if (!lastHeartbeatMs) {
+        return 'waiting';
+      }
+
+      if (intervalSeconds && intervalSeconds > 0) {
+        const thresholdMs = intervalSeconds * 2000;
+        if ((Date.now() - lastHeartbeatMs) > thresholdMs) {
+          return 'lost signal';
+        }
+      }
+
+      return 'live';
+    }
+
+    function getRunStatusClass(statusValue) {
+      if (statusValue === 'live') return 'badge badge-success';
+      if (statusValue === 'lost signal') return 'badge badge-warning';
+      if (statusValue === 'completed') return 'badge badge-secondary';
+      if (statusValue === 'failed') return 'badge badge-danger';
+      return 'badge badge-light';
+    }
+
+    function updateWorkflowFilterOptions() {
+      const workflows = Array.from(new Set(Array.from(liveRuns.values()).map((run) => run.workflow))).sort();
+      const currentValue = workflowFilter.value;
+
+      workflowFilter.innerHTML = '<option value="">All Workflows</option>';
+
+      workflows.forEach((workflow) => {
+        const option = document.createElement('option');
+        option.value = workflow;
+        option.textContent = workflow;
+        workflowFilter.appendChild(option);
+      });
+
+      if (workflows.includes(currentValue)) {
+        workflowFilter.value = currentValue;
+      }
+    }
+
+    function passesFilters(event) {
+      const levelNeedle = levelFilter.value;
+      const ruleNeedle = ruleFilter.value.trim().toLowerCase();
+      const messageNeedle = messageFilter.value.trim().toLowerCase();
+
+      if (levelNeedle && event.level !== levelNeedle) {
+        return false;
+      }
+
+      if (ruleNeedle && !safeValue(event.rule).toLowerCase().includes(ruleNeedle)) {
+        return false;
+      }
+
+      if (messageNeedle && !safeValue(event.message).toLowerCase().includes(messageNeedle)) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function updateSelectedRunLabel() {
+      if (!selectedWorkflowId) {
+        selectedRunLabel.textContent = 'No workflow selected';
+        return;
+      }
+
+      selectedRunLabel.textContent = `${selectedWorkflowId} | ${appliedLogOffset}`;
+    }
+
+    function friendlyEventType(eventType) {
+      if (!eventType || eventType === 'LOG') return '';
+      return eventType.toLowerCase().replace(/_/g, ' ');
+    }
+
+    function renderLogs() {
+      if (!selectedWorkflowId) {
+        logOutput.textContent = 'Select a workflow to load stream logs.';
+        return;
+      }
+
+      if (!client || !client.connected) {
+        logOutput.textContent = `Waiting for broker connection to load logs for workflow ${selectedWorkflowId}.`;
+        return;
+      }
+
+      const filtered = selectedRunLogs.filter(passesFilters);
+      if (!filtered.length) {
+        logOutput.textContent = `Waiting for non-heartbeat events for workflow ${selectedWorkflowId} from ${appliedLogOffset}.`;
+        return;
+      }
+
+      const lines = filtered.map((event) => {
+        const time = formatTime(event.timestamp);
+        const level = safeValue(event.level, 'INFO').padEnd(8);
+
+        const context = [];
+        if (event.rule) context.push(event.rule);
+        if (event.jobId) context.push(`job #${event.jobId}`);
+
+        const contextStr = context.length ? `  ${context.join(' › ')}` : '';
+
+        const rawMessage = safeValue(event.message, '') || friendlyEventType(event.eventType);
+        const messagePart = rawMessage ? `  ${rawMessage}` : '';
+
+        return `${time}  ${level}${contextStr}${messagePart}`;
+      });
+
+      logOutput.textContent = lines.join('\n');
       logOutput.scrollTop = logOutput.scrollHeight;
     }
 
-    function setConnectedState(isConnected) {
-      connectBtn.disabled = isConnected;
-      disconnectBtn.disabled = !isConnected;
-      brokerUrlInput.disabled = isConnected;
-      destinationInput.disabled = isConnected;
-      loginInput.disabled = isConnected;
-      passcodeInput.disabled = isConnected;
-      status.textContent = isConnected ? 'Connected' : 'Disconnected';
+    function createRunMetaLine(text) {
+      const meta = document.createElement('small');
+      meta.className = 'text-muted d-block';
+      meta.textContent = text;
+      return meta;
     }
 
-    connectBtn.addEventListener('click', () => {
-      const brokerURL = brokerUrlInput.value.trim();
-      const destination = destinationInput.value.trim();
+    function renderRunList() {
+      const workflowNeedle = workflowFilter.value;
+      const runs = Array.from(liveRuns.values())
+        .filter((run) => runIsInsideLiveWindow(run))
+        .filter((run) => !workflowNeedle || run.workflow === workflowNeedle)
+        .sort((a, b) => getRunSortTimestamp(b) - getRunSortTimestamp(a));
 
-      if (!brokerURL || !destination) {
-        appendLog('Broker URL and destination are required.');
+      runCountBadge.textContent = String(runs.length);
+      runList.innerHTML = '';
+
+      if (!runs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'list-group-item text-muted small';
+        empty.textContent = 'No runs found in the selected interval yet.';
+        runList.appendChild(empty);
         return;
       }
+
+      runs.forEach((run) => {
+        const statusValue = computeRunStatus(run);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `list-group-item list-group-item-action${selectedWorkflowId === run.workflowId ? ' active' : ''}`;
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'd-flex w-100 justify-content-between align-items-center';
+
+        const workflowLabel = document.createElement('span');
+        workflowLabel.className = 'font-weight-bold';
+        workflowLabel.textContent = safeValue(run.workflow, run.workflowId);
+
+        const statusBadge = document.createElement('span');
+        statusBadge.className = getRunStatusClass(statusValue);
+        statusBadge.textContent = statusValue;
+
+        headerRow.appendChild(workflowLabel);
+        headerRow.appendChild(statusBadge);
+
+        const identifier = document.createElement('div');
+        identifier.className = 'small text-muted';
+        identifier.textContent = run.workflowId;
+
+        const lastEventMs = getRunLastEventTimestamp(run);
+        const lastEventAge = lastEventMs ? formatDuration(Date.now() - lastEventMs) : '--';
+        const startedMs = new Date(run.workflowStartTimestamp || 0).getTime();
+        const startedAge = startedMs ? formatDuration(Date.now() - startedMs) : '--';
+
+        button.appendChild(headerRow);
+        button.appendChild(identifier);
+        button.appendChild(createRunMetaLine(`started ${startedAge} ago | last event ${lastEventAge} ago`));
+
+        if (run.terminalStatus) {
+          button.appendChild(createRunMetaLine(`terminal=${run.terminalStatus} @ ${safeValue(run.terminalAt, '--')}`));
+        }
+
+        button.addEventListener('click', () => {
+          selectWorkflow(run.workflowId);
+        });
+
+        runList.appendChild(button);
+      });
+
+      if (!selectedWorkflowId && runs.length > 0) {
+        selectWorkflow(runs[0].workflowId);
+      }
+    }
+
+    function upsertRunHeartbeat(event) {
+      const current = liveRuns.get(event.workflowId) || {
+        workflowId: event.workflowId,
+        workflow: event.workflow,
+        workflowStartTimestamp: event.workflowStartTimestamp,
+        lastSeenAt: event.timestamp,
+        lastHeartbeatAt: event.timestamp,
+        heartbeatIntervalSeconds: event.heartbeatIntervalSeconds,
+        lastStreamOffset: event.streamOffset,
+        lastDestination: event.destination,
+        terminalStatus: null,
+        terminalAt: '',
+      };
+
+        current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
+        current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
+      current.lastSeenAt = event.timestamp;
+      current.lastHeartbeatAt = event.timestamp;
+      current.heartbeatIntervalSeconds = event.heartbeatIntervalSeconds || current.heartbeatIntervalSeconds;
+      current.lastStreamOffset = event.streamOffset || current.lastStreamOffset;
+      current.lastDestination = event.destination || current.lastDestination;
+
+      liveRuns.set(event.workflowId, current);
+    }
+
+    function applyLifecycleEvent(event) {
+      const current = liveRuns.get(event.workflowId) || {
+        workflowId: event.workflowId,
+        workflow: event.workflow,
+        workflowStartTimestamp: event.workflowStartTimestamp,
+        lastSeenAt: event.timestamp,
+        lastHeartbeatAt: '',
+        heartbeatIntervalSeconds: null,
+        lastStreamOffset: event.streamOffset,
+        lastDestination: event.destination,
+        terminalStatus: null,
+        terminalAt: '',
+      };
+
+        current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
+        current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
+      current.lastSeenAt = event.timestamp;
+      current.lastStreamOffset = event.streamOffset || current.lastStreamOffset;
+      current.lastDestination = event.destination || current.lastDestination;
+      if (event.terminalStatus) {
+        current.terminalStatus = event.terminalStatus;
+        current.terminalAt = event.timestamp;
+      }
+
+      liveRuns.set(event.workflowId, current);
+    }
+
+    function pushSelectedLog(event) {
+      selectedRunLogs.push(event);
+      if (selectedRunLogs.length > MAX_LOG_EVENTS) {
+        selectedRunLogs.shift();
+      }
+    }
+
+    function clearSelectedLogs() {
+      selectedRunLogs.length = 0;
+    }
+
+    function unsubscribeAll(subscriptions) {
+      subscriptions.forEach((subscription) => {
+        try {
+          subscription.unsubscribe();
+        } catch (error) {
+          console.warn('Failed to unsubscribe STOMP subscription', error);
+        }
+      });
+      subscriptions.length = 0;
+    }
+
+    function buildLiveSubscriptionHeaders(destination, index) {
+      const headers = {
+        id: `live-${index}-${Date.now()}`,
+      };
+
+      headers.ack = 'client-individual';
+      headers['prefetch-count'] = LIVE_PREFETCH_COUNT;
+      const fromUnixSeconds = Math.floor(getLiveWindowCutoffMs() / 1000);
+      headers['x-stream-offset'] = `timestamp=${fromUnixSeconds}`;
+      return headers;
+    }
+
+    function buildLogSubscriptionHeaders(destination, index, offsetConfig) {
+      const headers = {
+        id: `log-${selectedWorkflowId}-${index}-${Date.now()}`,
+      };
+
+      headers.ack = 'client-individual';
+      headers['prefetch-count'] = LOG_PREFETCH_COUNT;
+      headers['x-stream-offset'] = offsetConfig.headerValue;
+      headers['x-stream-filter'] = selectedWorkflowId;
+      headers['x-stream-match-unfiltered'] = 'false';
+      return headers;
+    }
+
+    function handleLiveMessage(message) {
+      streamCounts.received += 1;
+
+      const event = parseStructuredEvent(message);
+      if (event) {
+        streamCounts.parsed += 1;
+
+        if (isHeartbeatEvent(event)) {
+          streamCounts.live += 1;
+          upsertRunHeartbeat(event);
+          updateWorkflowFilterOptions();
+          renderRunList();
+        } else {
+          applyLifecycleEvent(event);
+          renderRunList();
+        }
+      } else {
+        streamCounts.raw += 1;
+      }
+
+      acknowledgeMessage(message);
+    }
+
+    function handleLogMessage(message) {
+      streamCounts.received += 1;
+
+      const event = parseStructuredEvent(message);
+      if (event) {
+        streamCounts.parsed += 1;
+
+        // RabbitMQ stream filtering uses bloom filter; double check that this event belongs
+        if (!isHeartbeatEvent(event) && event.workflowId === selectedWorkflowId) {
+          streamCounts.logs += 1;
+          pushSelectedLog(event);
+          renderLogs();
+        }
+      } else {
+        streamCounts.raw += 1;
+      }
+
+      acknowledgeMessage(message);
+    }
+
+    function subscribeLiveRuns() {
+      unsubscribeAll(liveSubscriptions);
+
+      if (!client || !client.connected) {
+        return;
+      }
+
+      const destinations = parseDestinations(STREAM_DESTINATION);
+      liveSubscriptions = destinations.map((destination, index) => {
+        const passiveDest = toPassiveDestination(destination);
+        return client.subscribe(
+          passiveDest,
+          handleLiveMessage,
+          buildLiveSubscriptionHeaders(passiveDest, index),
+        );
+      });
+    }
+
+    function subscribeSelectedWorkflowLogs(startPosition = DEFAULT_LOG_START) {
+      unsubscribeAll(logSubscriptions);
+      clearSelectedLogs();
+
+      if (!client || !client.connected || !selectedWorkflowId) {
+        renderLogs();
+        return;
+      }
+
+      const offsetConfig = {
+        headerValue: startPosition,
+        label: startPosition,
+      };
+
+      appliedLogOffset = offsetConfig.label;
+      updateOffsetHelp();
+      updateSelectedRunLabel();
+      renderLogs();
+
+      const destinations = parseDestinations(STREAM_DESTINATION);
+      logSubscriptions = destinations.map((destination, index) => {
+        const passiveDest = toPassiveDestination(destination);
+        return client.subscribe(
+          passiveDest,
+          handleLogMessage,
+          buildLogSubscriptionHeaders(passiveDest, index, offsetConfig),
+        );
+      });
+    }
+
+    function selectWorkflow(workflowId) {
+      selectedWorkflowId = workflowId;
+      updateSelectedRunLabel();
+      renderRunList();
+      subscribeSelectedWorkflowLogs();
+    }
+
+    function resetState() {
+      liveRuns.clear();
+      clearSelectedLogs();
+      selectedWorkflowId = null;
+      appliedLogOffset = DEFAULT_LOG_START;
+      streamCounts.received = 0;
+      streamCounts.parsed = 0;
+      streamCounts.raw = 0;
+      streamCounts.live = 0;
+      streamCounts.logs = 0;
+      updateSelectedRunLabel();
+      updateWorkflowFilterOptions();
+      updateOffsetHelp();
+      renderRunList();
+      renderLogs();
+    }
+
+    function autoConnect() {
+      if (!window.StompJs || !window.StompJs.Client) {
+        showConnectionError('STOMP client library failed to load.');
+        return;
+      }
+
+      const brokerURL = resolveBrokerUrl();
 
       client = new StompJs.Client({
         brokerURL,
         connectHeaders: {
-          login: loginInput.value,
-          passcode: passcodeInput.value,
+           login: BROKER_LOGIN,
+           passcode: BROKER_PASSCODE,
         },
         reconnectDelay: 3000,
         heartbeatIncoming: 10000,
@@ -106,48 +838,67 @@
       });
 
       client.onConnect = () => {
-        setConnectedState(true);
-        appendLog(`Connected to ${brokerURL}`);
-        subscription = client.subscribe(destination, (message) => {
-          appendLog(message.body);
-        });
-        appendLog(`Subscribed to ${destination}`);
+        hideConnectionError();
+        brokerIndicator.className = 'badge badge-success';
+        brokerIndicator.textContent = 'connected';
+        brokerQueue.textContent = STREAM_DESTINATION;
+        subscribeLiveRuns();
+        subscribeSelectedWorkflowLogs();
       };
 
       client.onStompError = (frame) => {
-        appendLog(`Broker error: ${frame.headers['message'] || 'unknown error'}`);
+        showConnectionError(`Broker error: ${frame.headers['message'] || 'unknown error'}`);
       };
 
       client.onWebSocketError = (event) => {
-        appendLog(`WebSocket error: ${event.type || 'error'}`);
+        showConnectionError(`WebSocket error: ${event.type || 'error'}`);
       };
 
       client.onWebSocketClose = () => {
-        setConnectedState(false);
-        appendLog('Connection closed.');
+        brokerIndicator.className = 'badge badge-secondary';
+        brokerIndicator.textContent = 'reconnecting…';
+        brokerQueue.textContent = '';
+        unsubscribeAll(liveSubscriptions);
+        unsubscribeAll(logSubscriptions);
+        renderLogs();
       };
 
       client.activate();
-      status.textContent = 'Connecting...';
-      appendLog(`Connecting to ${brokerURL} ...`);
-    });
-
-    disconnectBtn.addEventListener('click', async () => {
-      if (subscription) {
-        subscription.unsubscribe();
-        subscription = null;
-      }
-      if (client) {
-        await client.deactivate();
-        client = null;
-      }
-      setConnectedState(false);
-      appendLog('Disconnected.');
-    });
+    }
 
     clearBtn.addEventListener('click', () => {
-      logOutput.textContent = '';
+      unsubscribeAll(liveSubscriptions);
+      unsubscribeAll(logSubscriptions);
+      resetState();
+
+      if (client && client.connected) {
+        subscribeLiveRuns();
+      }
     });
+
+    workflowFilter.addEventListener('change', renderRunList);
+    liveInterval.addEventListener('change', () => {
+      renderRunList();
+      if (client && client.connected) {
+        subscribeLiveRuns();
+      }
+    });
+    showFromBeginningBtn.addEventListener('click', () => {
+      subscribeSelectedWorkflowLogs('first');
+    });
+    [levelFilter, ruleFilter, messageFilter].forEach((element) => {
+      element.addEventListener('input', renderLogs);
+    });
+
+    window.setInterval(() => {
+      if (liveRuns.size > 0) {
+        renderRunList();
+      }
+    }, HEARTBEAT_REFRESH_MS);
+
+    updateOffsetHelp();
+    resetState();
+    autoConnect();
   })();
 </script>
 {% endblock %}

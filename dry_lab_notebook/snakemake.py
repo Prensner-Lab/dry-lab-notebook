@@ -1,0 +1,1 @@
+import snakemake_logger_plugin_stomp

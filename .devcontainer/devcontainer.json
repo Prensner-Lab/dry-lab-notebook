@@ -31,8 +31,7 @@
         "ms-python.python",
         "ms-python.debugpy",
         "batisteo.vscode-django",
-        "ms-python.vscode-pylance",
-        "ms-azuretools.vscode-docker"
+        "ms-python.vscode-pylance"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/app/.venv/bin/python",

@@ -1,13 +1,26 @@
 COMPOSE = podman compose
 PROJECT_NAME ?= dry-lab-notebook-prod
 BASE = -p $(PROJECT_NAME) -f docker-compose.yml
+PYTHON ?= /app/.venv/bin/python
 
 -include .env
 export
 
 STATICFILES_HOST_DIR ?= $(PWD)/staticfiles
+STOMP_HOST ?= rabbitmq
+STOMP_PORT ?= 61613
+STOMP_VHOST ?= /
+STOMP_STREAM_QUEUE ?= /queue/test
+STOMP_USE_STREAM ?= 1
+STOMP_STREAM_OFFSET ?= last
+STOMP_PREFETCH_COUNT ?= 100
+STOMP_MAX_EVENTS ?= 20
+STOMP_IDLE_TIMEOUT_SECONDS ?= 2
+STOMP_FOLLOW ?= 0
+STOMP_DEBUG ?=
+WORKFLOW_EVENTS_OUT ?= workflow-events.jsonl
 
-.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build staticfiles-dir image-check prod-up prod-down collectstatic
+.PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build staticfiles-dir image-check prod-up prod-down collectstatic live-test-setup live-test-snakemake collect-workflow-events
 
 db.sqlite3:
 	@echo "WARNING: db.sqlite3 not found — creating empty file to prevent Docker mount issue."
@@ -65,3 +78,29 @@ prod-up: image-check db.sqlite3
 
 prod-down:
 	$(COMPOSE) $(BASE) down
+
+live-test-setup:
+	$(PYTHON) -m pip install -r requirements-live-test.txt
+
+live-test-snakemake: live-test-setup
+	$(PYTHON) scripts/live_snakemake_stomp_test.py
+
+collect-workflow-events: live-test-setup
+	$(PYTHON) scripts/collect_workflow_events.py \
+		--host "$(STOMP_HOST)" \
+		--port "$(STOMP_PORT)" \
+		--user "$${STOMP_USER:-$${RABBITMQ_USER:-guest}}" \
+		--password "$${STOMP_PASSWORD:-$${RABBITMQ_PASSWORD:-guest}}" \
+		--virtual-host "$(STOMP_VHOST)" \
+		--destination "$(STOMP_STREAM_QUEUE)" \
+		$(if $(filter 1 true TRUE yes YES on ON,$(STOMP_USE_STREAM)),--use-stream,) \
+		--stream-offset "$(STOMP_STREAM_OFFSET)" \
+		--prefetch-count "$(STOMP_PREFETCH_COUNT)" \
+		--max-events "$(STOMP_MAX_EVENTS)" \
+		--idle-timeout-seconds "$(STOMP_IDLE_TIMEOUT_SECONDS)" \
+		$(if $(filter 1 true TRUE yes YES on ON,$(STOMP_FOLLOW)),--follow,) \
+		--output "$(WORKFLOW_EVENTS_OUT)" \
+		$(if $(STOMP_DEBUG),--debug-stomp,)
+
+print-events: workflow-events.jsonl
+	jq '.body | fromjson' workflow-events.jsonl
