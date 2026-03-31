@@ -102,8 +102,8 @@
     const STREAM_DESTINATION = '{{ STOMP_STREAM_QUEUE|default:"/queue/snakemake.events" }}';
     const DEFAULT_LOG_START = 'next';
     const MAX_LOG_EVENTS = 2000;
-    const BROKER_LOGIN = 'guest';
-    const BROKER_PASSCODE = 'guest';
+    const BROKER_LOGIN = '{{ RABBITMQ_DEFAULT_USER|default:"guest" }}';
+    const BROKER_PASSCODE = '{{ RABBITMQ_DEFAULT_PASS|default:"guest"}}';
     const LIVE_PREFETCH_COUNT = '50';
     const LOG_PREFETCH_COUNT = '250';
     const HEARTBEAT_REFRESH_MS = 1000;

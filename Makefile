@@ -1,5 +1,5 @@
 COMPOSE = podman compose
-PROJECT_NAME ?= dry-lab-notebook-prod
+PROJECT_NAME ?= dry-lab-notebook-app
 BASE = -p $(PROJECT_NAME) -f docker-compose.yml
 PYTHON ?= /app/.venv/bin/python
 
@@ -73,8 +73,8 @@ collectstatic: image-check staticfiles-dir
 		dry-lab-notebook \
 		python manage.py collectstatic --noinput
 
-prod-up: image-check db.sqlite3
-	$(COMPOSE) $(BASE) up -d
+prod-up: db.sqlite3
+	$(COMPOSE) $(BASE) up -d --build --force-recreate
 
 prod-down:
 	$(COMPOSE) $(BASE) down

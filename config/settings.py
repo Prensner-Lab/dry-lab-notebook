@@ -167,6 +167,8 @@ SOCIAL_AUTH_GLOBUS_KEY = os.environ.get("SOCIAL_AUTH_GLOBUS_KEY")
 SOCIAL_AUTH_GLOBUS_SECRET = os.environ.get("SOCIAL_AUTH_GLOBUS_SECRET")
 
 STOMP_STREAM_QUEUE = os.environ.get("STOMP_STREAM_QUEUE", "/queue/snakemake.events")
+RABBITMQ_DEFAULT_USER = os.environ.get("RABBITMQ_DEFAULT_USER", "guest")
+RABBITMQ_DEFAULT_PASS = os.environ.get("RABBITMQ_DEFAULT_PASS", "guest")
 
 SEARCH_INDEXES = {
     slug: {

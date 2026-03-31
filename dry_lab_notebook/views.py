@@ -368,6 +368,8 @@ class StompLogsView(View):
     def get_context_data(self):
         return {
             "STOMP_STREAM_QUEUE": settings.STOMP_STREAM_QUEUE,
+            "RABBITMQ_DEFAULT_USER": settings.RABBITMQ_DEFAULT_USER,
+            "RABBITMQ_DEFAULT_PASS": settings.RABBITMQ_DEFAULT_PASS,
         }
 
     def get(self, request: django.http.HttpRequest):
