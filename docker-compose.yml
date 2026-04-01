@@ -17,7 +17,7 @@ services:
       - ./rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro
 
   web:
-    image: dry-lab-notebook:latest
+    image: ${WEB_IMAGE:-dry-lab-notebook:latest}
     build: .
     volumes:
       - ./db.sqlite3:/app/db.sqlite3
