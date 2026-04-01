@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  sanity-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Django sanity check
+        env:
+          SECRET_KEY: ci-secret-key
+          ALLOWED_HOST: localhost
+        run: python manage.py check
+
+      - name: Build container image
+        run: docker build -t dry-lab-notebook:ci .
