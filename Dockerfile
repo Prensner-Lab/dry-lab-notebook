@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     git \
     make \
     jq \
+    nginx \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -23,3 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project
 COPY . .
+
+RUN chmod +x /app/scripts/start-web.sh \
+    && rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf \
+    && cp /app/nginx/default.conf /etc/nginx/conf.d/default.conf \
+    && cp /app/supervisor/web.conf /etc/supervisor/conf.d/web.conf

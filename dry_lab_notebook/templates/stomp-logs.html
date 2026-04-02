@@ -100,6 +100,7 @@
 <script>
   (() => {
     const STREAM_DESTINATION = '{{ STOMP_STREAM_QUEUE|default:"/queue/snakemake.events" }}';
+    const CONFIGURED_BROKER_URL = '{{ STOMP_BROWSER_WS_URL|default:""|escapejs }}';
     const DEFAULT_LOG_START = 'next';
     const MAX_LOG_EVENTS = 2000;
     const BROKER_LOGIN = '{{ RABBITMQ_DEFAULT_USER|default:"guest" }}';
@@ -109,12 +110,13 @@
     const HEARTBEAT_REFRESH_MS = 1000;
 
     function resolveBrokerUrl() {
-      const hostname = window.location.hostname;
-      const isLocalDevHost = hostname === 'localhost' || hostname === '127.0.0.1';
+      if (CONFIGURED_BROKER_URL) {
+        return CONFIGURED_BROKER_URL;
+      }
+
+      const hostname = window.location.hostname || 'localhost';
       const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const port = isLocalDevHost ? 15684 : 15674;
-      const targetHost = isLocalDevHost ? 'localhost' : hostname;
-      return `${scheme}://${targetHost}:${port}/ws`;
+      return `${scheme}://${hostname}:15674/ws`;
     }
 
     const clearBtn = document.getElementById('clearBtn');

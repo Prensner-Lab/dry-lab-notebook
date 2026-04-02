@@ -1,28 +1,31 @@
 {
   "name": "dry-lab-notebook",
-  "dockerComposeFile": [
-    "docker-compose.yml"
-  ],
-  "service": "web",
-  "runServices": [
-    "web",
-    "rabbitmq"
-  ],
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
   "workspaceFolder": "/app",
-  "shutdownAction": "stopCompose",
   "overrideCommand": true,
+  "runArgs": [
+    "--add-host=host.docker.internal:host-gateway",
+    "--name=dry-lab-notebook-devcontainer"
+  ],
+  "containerEnv": {
+    "DEBUG": "1",
+    "RABBITMQ_URL": "stomp://drylabnotebook:guest@host.docker.internal:61613",
+    "RABBITMQ_DEFAULT_USER": "drylabnotebook",
+    "RABBITMQ_DEFAULT_PASS": "guest",
+    "STOMP_BROWSER_WS_URL": "ws://localhost:15674/ws",
+    "PROJECT_TITLE": "Dry Lab Notebook (dev configuration)"
+  },
   "forwardPorts": [
-    8000,
-    15682
+    8000
   ],
   "portsAttributes": {
     "8000": {
       "label": "Django dev server",
       "onAutoForward": "notify"
-    },
-    "15682": {
-      "label": "RabbitMQ management (dev)",
-      "onAutoForward": "silent"
     }
   },
   "customizations": {
