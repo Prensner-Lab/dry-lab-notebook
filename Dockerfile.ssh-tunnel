@@ -1,4 +1,7 @@
-FROM alpine:3.20
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache autossh openssh-client sshpass
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends autossh openssh-client sshpass tini \
+	&& rm -rf /var/lib/apt/lists/*
+
 CMD ["tail", "-f", "/dev/null"]

@@ -191,7 +191,13 @@ class FileWriterListener(stomp.ConnectionListener):
         if not self.quiet:
             event_name = None
             if isinstance(parsed_body, dict):
-                event_name = parsed_body.get("event_type")
+                raw_event = parsed_body.get("event")
+                if raw_event is None:
+                    event_name = "CONSUMER_HEARTBEAT"
+                elif isinstance(raw_event, dict):
+                    event_name = raw_event.get("event") or raw_event.get("type")
+                elif isinstance(raw_event, str):
+                    event_name = raw_event
             summary = f"event={event_name}" if event_name else "event=unknown"
             print(f"[{current_count}] Captured message ({summary}).")
 
