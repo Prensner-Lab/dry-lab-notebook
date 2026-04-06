@@ -39,12 +39,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ssh-tunnel
-    entrypoint: ["tail"]
+    entrypoint: ["/usr/bin/tini", "--", "tail"]
     command: ["-f", "/dev/null"]
     environment:
-      - SSH_TUNNEL_HOST=${SSH_TUNNEL_HOST}
+      - SSH_TUNNEL_HOST=${STOMP_PRODUCER_HOST}
       - SSH_TUNNEL_SSH_PORT=${SSH_TUNNEL_SSH_PORT:-22}
-      - SSH_TUNNEL_USER=${SSH_TUNNEL_USER}
       - STOMP_TUNNEL_REMOTE_PORT=${STOMP_TUNNEL_REMOTE_PORT:-61613}
     depends_on:
       - rabbitmq

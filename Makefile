@@ -2,16 +2,16 @@ COMPOSE = podman compose
 PROJECT_NAME ?= dry-lab-notebook-app
 BASE = -p $(PROJECT_NAME) -f docker-compose.yml
 COMPOSE_CMD = $(COMPOSE) $(BASE)
-PYTHON ?= /app/.venv/bin/python
+PYTHON ?= .venv/bin/python
 
 -include .env
 export
 
 STATICFILES_HOST_DIR ?= $(PWD)/staticfiles
-STOMP_HOST ?= rabbitmq
+STOMP_HOST ?= localhost
 STOMP_PORT ?= 61613
 STOMP_VHOST ?= /
-STOMP_STREAM_QUEUE ?= /queue/test
+STOMP_STREAM_QUEUE ?= /queue/snakemake.events
 STOMP_USE_STREAM ?= 1
 STOMP_STREAM_OFFSET ?= last
 STOMP_PREFETCH_COUNT ?= 100
@@ -21,7 +21,7 @@ STOMP_FOLLOW ?= 0
 STOMP_DEBUG ?=
 WORKFLOW_EVENTS_OUT ?= workflow-events.jsonl
 SSH_TUNNEL_SSH_PORT ?= 22
-SSH_TUNNEL_USER ?= tunnel
+SSH_TUNNEL_HOST ?= $(STOMP_PRODUCER_HOST)
 STOMP_TUNNEL_REMOTE_PORT ?= 61613
 
 .PHONY: dev-up dev-down dev-logs dev-shell migrate makemigrations createsuperuser test build staticfiles-dir image-check prod-up prod-down collectstatic tunnel-helper-up tunnel-refresh tunnel-up tunnel-connect tunnel-status tunnel-stop live-test-setup live-test-snakemake collect-workflow-events
@@ -110,40 +110,32 @@ tunnel-up: tunnel-helper-up
 	$(COMPOSE_CMD) ps rabbitmq ssh-tunnel
 
 tunnel-connect: tunnel-helper-up
-	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] && pid=$$(cat "$${pidfile}") && kill -0 "$${pid}"' >/dev/null 2>&1; then \
+	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] || exit 1; pid=$$(cat "$${pidfile}" 2>/dev/null) || exit 1; case "$${pid}" in ""|*[!0-9]*) exit 1;; esac; [ -d "/proc/$${pid}" ] || exit 1; state=$$(awk "{print \$$3}" "/proc/$${pid}/stat" 2>/dev/null) || exit 1; [ "$${state}" != "Z" ] || exit 1; tr "\000" " " <"/proc/$${pid}/cmdline" | grep -Eq "(^|/)autossh([[:space:]]|$$)" || exit 1; kill -0 "$${pid}"' >/dev/null 2>&1; then \
 		echo "autossh already running; reusing existing process."; \
 		echo "PID: $$($(COMPOSE_CMD) exec ssh-tunnel sh -lc 'cat /tmp/autossh.pid')"; \
 		exit 0; \
 	fi
-	@read -r -p "SSH username [$(SSH_TUNNEL_USER)]: " SSH_USER; \
-	SSH_USER=$${SSH_USER:-$(SSH_TUNNEL_USER)}; \
+	@if [ -z "$$TMUX" ]; then \
+		echo "WARNING: Not running inside tmux. Tmux is only way (for now) to detach after performing interactive ssh auth."; \
+	fi
+	@read -r -p "SSH username: " SSH_USER; \
 	if [ -z "$$SSH_USER" ]; then echo "ERROR: SSH username is required."; exit 1; fi; \
 	read -r -p "SSH host [$(SSH_TUNNEL_HOST)]: " SSH_HOST; \
 	SSH_HOST=$${SSH_HOST:-$(SSH_TUNNEL_HOST)}; \
 	if [ -z "$$SSH_HOST" ]; then echo "ERROR: SSH host is required."; exit 1; fi; \
 	read -r -p "SSH port [$(SSH_TUNNEL_SSH_PORT)]: " SSH_PORT; \
 	SSH_PORT=$${SSH_PORT:-$(SSH_TUNNEL_SSH_PORT)}; \
-	printf "SSH password: "; stty -echo; read -r SSH_PASS; stty echo; printf "\n"; \
-	if [ -z "$$SSH_PASS" ]; then echo "ERROR: SSH password is required."; exit 1; fi; \
-	echo "Starting autossh in background..."; \
+	echo "Starting autossh. SSH may prompt for credentials once."; \
 	$(COMPOSE_CMD) exec \
-		-e SSHPASS="$$SSH_PASS" \
+		-e AUTOSSH_PIDFILE="/tmp/autossh.pid" \
+		-e AUTOSSH_LOGFILE="/tmp/autossh.log" \
 		-e SSH_TUNNEL_RUNTIME_USER="$$SSH_USER" \
 		-e SSH_TUNNEL_RUNTIME_HOST="$$SSH_HOST" \
 		-e SSH_TUNNEL_RUNTIME_PORT="$$SSH_PORT" \
-		ssh-tunnel sh -lc 'nohup sshpass -e autossh -M 0 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R 0.0.0.0:$(STOMP_TUNNEL_REMOTE_PORT):rabbitmq:61613 -p "$${SSH_TUNNEL_RUNTIME_PORT}" "$${SSH_TUNNEL_RUNTIME_USER}@$${SSH_TUNNEL_RUNTIME_HOST}" >/tmp/autossh.log 2>&1 & echo $$! >/tmp/autossh.pid'; \
-	sleep 1; \
-	if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] && pid=$$(cat "$${pidfile}") && kill -0 "$${pid}"' >/dev/null 2>&1; then \
-		echo "autossh started. PID: $$($(COMPOSE_CMD) exec ssh-tunnel sh -lc 'cat /tmp/autossh.pid')"; \
-		echo "Check logs with: make tunnel-status"; \
-	else \
-		echo "ERROR: autossh failed to start. Recent log output:"; \
-		$(COMPOSE_CMD) exec ssh-tunnel sh -lc "tail -n 80 /tmp/autossh.log || true"; \
-		exit 1; \
-	fi
+		ssh-tunnel sh -lc 'rm -f /tmp/autossh.pid /tmp/autossh.log; autossh -M 0 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -R 0.0.0.0:$(STOMP_TUNNEL_REMOTE_PORT):rabbitmq:61613 -p "$${SSH_TUNNEL_RUNTIME_PORT}" "$${SSH_TUNNEL_RUNTIME_USER}@$${SSH_TUNNEL_RUNTIME_HOST}"'
 
 tunnel-status: tunnel-helper-up
-	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] && pid=$$(cat "$${pidfile}") && kill -0 "$${pid}"' >/dev/null 2>&1; then \
+	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] || exit 1; pid=$$(cat "$${pidfile}" 2>/dev/null) || exit 1; case "$${pid}" in ""|*[!0-9]*) exit 1;; esac; [ -d "/proc/$${pid}" ] || exit 1; state=$$(awk "{print \$$3}" "/proc/$${pid}/stat" 2>/dev/null) || exit 1; [ "$${state}" != "Z" ] || exit 1; tr "\000" " " <"/proc/$${pid}/cmdline" | grep -Eq "(^|/)autossh([[:space:]]|$$)" || exit 1; kill -0 "$${pid}"' >/dev/null 2>&1; then \
 		echo "autossh running. PID: $$($(COMPOSE_CMD) exec ssh-tunnel sh -lc 'cat /tmp/autossh.pid')"; \
 	else \
 		echo "autossh is not running."; \
@@ -156,7 +148,7 @@ tunnel-status: tunnel-helper-up
 	fi
 
 tunnel-stop: tunnel-helper-up
-	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] && pid=$$(cat "$${pidfile}") && kill -0 "$${pid}"' >/dev/null 2>&1; then \
+	@if $(COMPOSE_CMD) exec ssh-tunnel sh -lc 'pidfile=/tmp/autossh.pid; [ -f "$${pidfile}" ] || exit 1; pid=$$(cat "$${pidfile}" 2>/dev/null) || exit 1; case "$${pid}" in ""|*[!0-9]*) exit 1;; esac; [ -d "/proc/$${pid}" ] || exit 1; state=$$(awk "{print \$$3}" "/proc/$${pid}/stat" 2>/dev/null) || exit 1; [ "$${state}" != "Z" ] || exit 1; tr "\000" " " <"/proc/$${pid}/cmdline" | grep -Eq "(^|/)autossh([[:space:]]|$$)" || exit 1; kill -0 "$${pid}"' >/dev/null 2>&1; then \
 		$(COMPOSE_CMD) exec ssh-tunnel sh -lc "kill $$(cat /tmp/autossh.pid) && rm -f /tmp/autossh.pid"; \
 		echo "autossh stopped."; \
 	else \
@@ -181,7 +173,7 @@ live-test-setup:
 live-test-snakemake: live-test-setup
 	$(PYTHON) scripts/live_snakemake_stomp_test.py
 
-collect-workflow-events: live-test-setup
+collect-workflow-events:
 	$(PYTHON) scripts/collect_workflow_events.py \
 		--host "$(STOMP_HOST)" \
 		--port "$(STOMP_PORT)" \

@@ -3,6 +3,19 @@
 
 {%block headextras%}
   <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+  <style>
+    .run-selected {
+      border-left: 4px solid #007bff !important;
+      background-color: #f0f6ff !important;
+      color: inherit !important;
+    }
+    .run-selected .text-muted {
+      color: #555 !important;
+    }
+    .run-selected .badge {
+      color: #fff;
+    }
+  </style>
 {% endblock %}
 
 {% block breadcrumbs %}{{block.super}}{% endblock %}
@@ -28,7 +41,6 @@
               <span>Recent Workflows</span>
               <div class="d-flex align-items-center">
                 <span id="runCountBadge" class="badge badge-secondary mr-2">0</span>
-                <button id="clearBtn" class="btn btn-outline-secondary btn-sm" type="button">Clear</button>
               </div>
             </div>
             <div class="card-body p-0">
@@ -40,9 +52,9 @@
                   <option value="21600">Last 6 hours</option>
                   <option value="86400">Last 24 hours</option>
                 </select>
-                <label for="workflowFilter" class="mb-1">Workflow Filter</label>
-                <select id="workflowFilter" class="form-control form-control-sm">
-                  <option value="">All Workflows</option>
+                <label for="userFilter" class="mb-1">User Filter</label>
+                <select id="userFilter" class="form-control form-control-sm">
+                  <option value="">All Users</option>
                 </select>
               </div>
               <div id="runList" class="list-group list-group-flush" style="max-height: 45vh; overflow: auto;"></div>
@@ -119,7 +131,6 @@
       return `${scheme}://${hostname}:15674/ws`;
     }
 
-    const clearBtn = document.getElementById('clearBtn');
     const showFromBeginningBtn = document.getElementById('showFromBeginningBtn');
     const connectionError = document.getElementById('connectionError');
     const connectionErrorMsg = document.getElementById('connectionErrorMsg');
@@ -127,7 +138,7 @@
     const brokerQueue = document.getElementById('brokerQueue');
     const offsetHelp = document.getElementById('offsetHelp');
     const liveInterval = document.getElementById('liveInterval');
-    const workflowFilter = document.getElementById('workflowFilter');
+    const userFilter = document.getElementById('userFilter');
     const levelFilter = document.getElementById('levelFilter');
     const ruleFilter = document.getElementById('ruleFilter');
     const messageFilter = document.getElementById('messageFilter');
@@ -143,6 +154,7 @@
     let appliedLogOffset = 'next';
 
     const liveRuns = new Map();
+    const pendingHeartbeats = new Map(); // keyed by workingDirectory, for heartbeats without a workflow_id
     const selectedRunLogs = [];
 
     const streamCounts = {
@@ -221,6 +233,18 @@
       return segments.length ? segments[segments.length - 1] : '';
     }
 
+    function dirnameJsPath(pathValue) {
+      const normalized = safeValue(pathValue).replace(/\\/g, '/').replace(/\/+$/, '');
+      if (!normalized || !normalized.includes('/')) {
+        return '';
+      }
+      return normalized.slice(0, normalized.lastIndexOf('/')) || '/';
+    }
+
+    function normalizeDirectoryPath(pathValue) {
+      return safeValue(pathValue).replace(/\\/g, '/').replace(/\/+$/, '');
+    }
+
     function getLiveIntervalSeconds() {
       const parsed = Number.parseInt(liveInterval.value, 10);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : 3600;
@@ -232,16 +256,33 @@
 
     function runIsInsideLiveWindow(run) {
       const cutoff = getLiveWindowCutoffMs();
-      const candidateTimes = [
-        run.lastHeartbeatAt,
+      const primaryTimes = [
         run.lastSeenAt,
         run.terminalAt,
+        run.workflowStartTimestamp,
       ];
 
-      return candidateTimes.some((ts) => {
+      const hasPrimaryInWindow = primaryTimes.some((ts) => {
         const t = new Date(ts || 0).getTime();
         return Number.isFinite(t) && t >= cutoff;
       });
+
+      if (hasPrimaryInWindow) {
+        return true;
+      }
+
+      // Only use heartbeat time for workflows that have no lifecycle/start signal yet.
+      const hasPrimarySignal = primaryTimes.some((ts) => {
+        const t = new Date(ts || 0).getTime();
+        return Number.isFinite(t) && t > 0;
+      });
+
+      if (hasPrimarySignal) {
+        return false;
+      }
+
+      const heartbeatMs = new Date(run.lastHeartbeatAt || 0).getTime();
+      return Number.isFinite(heartbeatMs) && heartbeatMs >= cutoff;
     }
 
     function normalizeEventType(value) {
@@ -259,7 +300,7 @@
     }
 
     function isHeartbeatEvent(event) {
-      return event.eventType === 'CONSUMER_HEARTBEAT' || event.heartbeat === true;
+      return event.isHeartbeat === true;
     }
 
     function parseStructuredEvent(message) {
@@ -271,80 +312,66 @@
         return null;
       }
 
-      const workflowId = safeValue(
-        parsed.workflow_id
-          || parsed.workflowId
-          || parsed?.source?.workflow_id
-          || parsed?.source?.workflowId
-          || parsed?.event_details?.workflow_id
-          || message.headers['x-workflow-id']
-      );
+      const rawEvent = parsed?.event;
+      const eventDetails = (rawEvent && typeof rawEvent === 'object' && !Array.isArray(rawEvent))
+        ? rawEvent
+        : {};
+      const isHeartbeatMessage = rawEvent === null;
+
+      const workflowId = safeValue(parsed.workflow_id);
+
+      const eventType = isHeartbeatMessage
+        ? 'CONSUMER_HEARTBEAT'
+        : normalizeEventType(
+          eventDetails.event
+            || eventDetails.type
+            || 'LOG'
+        );
 
       if (!workflowId) {
         return null;
       }
 
       const fallbackWorkflow = safeValue(
-        parsed.workflow_name
-          || parsed.workflow
-          || parsed.pipeline
-          || parsed?.event_details?.workflow_name
-          || parsed?.source?.workflow_name
-          || workflowId
-          || parsed?.source?.workflow_id
-          || message.headers['x-workflow'],
+        eventDetails.workflow_name
+          || eventDetails.workflow
+          || eventDetails.pipeline
+          || workflowId,
         workflowId
       );
       const workingDirectory = safeValue(
-        parsed.working_directory
-          || parsed.workingDirectory
-          || parsed?.event_details?.working_directory
-          || parsed?.event_details?.workingDirectory
-          || parsed?.source?.working_directory
-          || parsed?.source?.workingDirectory
+        parsed.workflow_directory
+          || parsed.working_directory
       );
+      const normalizedWorkingDirectory = normalizeDirectoryPath(workingDirectory);
       const workflow = basenamePath(workingDirectory) || fallbackWorkflow;
-      const producer = safeValue(
-        parsed.producer
-          || parsed?.event_details?.producer
-          || parsed?.source?.producer
-          || message.headers['x-producer']
-      );
-      const eventType = normalizeEventType(parsed.event_type || parsed.type || parsed.event || 'LOG');
-      const level = safeValue(
-        parsed.level
-          || parsed.severity
-          || parsed?.payload?.level
-          || message.headers['x-level'],
-        'INFO'
-      ).toUpperCase();
+      const user = safeValue(parsed.user);
+      const level = safeValue(parsed.level || parsed.severity, 'INFO').toUpperCase();
       const heartbeatIntervalSeconds = parseNumeric(parsed.heartbeat_interval_seconds);
       const rawWorkflowStartTimestamp = (
-        parsed.workflow_start_timestamp
-          || parsed.workflowStartTimestamp
-          || parsed?.event_details?.workflow_start_timestamp
-          || parsed?.event_details?.workflowStartTimestamp
+        parsed.workflow_initiated
+          || parsed.workflow_start_timestamp
       );
       const workflowStartTimestamp = rawWorkflowStartTimestamp
         ? toIsoTimestamp(rawWorkflowStartTimestamp)
-        : '';
+        : (eventType === 'WORKFLOW_STARTED' ? toIsoTimestamp(parsed.timestamp || parsed.ts) : '');
 
       return {
         workflowId,
         workflow,
-        workingDirectory,
-        producer,
+        workingDirectory: normalizedWorkingDirectory,
+        user,
         level,
         eventType,
-        rule: safeValue(parsed.rule_name || parsed.rule || parsed.job_rule || parsed?.payload?.name),
-        jobId: safeValue(parsed.job_id || parsed.job || parsed.task_id || parsed?.payload?.jobid),
-        timestamp: toIsoTimestamp(parsed.event_ts || parsed.event_time || parsed.timestamp || parsed.ts),
-        message: safeValue(parsed.message || parsed.msg || parsed.log || parsed?.payload?.msg || parsed.body || ''),
-        summary: safeValue(parsed.summary || parsed?.event_details?.summary || ''),
+        rule: safeValue(eventDetails.rule_name || eventDetails.rule || eventDetails.job_rule || eventDetails.name),
+        jobId: safeValue(eventDetails.job_id || eventDetails.job || eventDetails.task_id || eventDetails.jobid),
+        timestamp: toIsoTimestamp(parsed.timestamp || parsed.ts),
+        message: safeValue(eventDetails.message || eventDetails.msg || eventDetails.log || eventDetails.body || ''),
+        summary: safeValue(eventDetails.summary || ''),
         destination: safeValue(message.headers.destination, ''),
-        sourceType: safeValue(parsed.source_type || parsed.source_type || parsed?.source?.agent_id || parsed.source || 'workflow'),
+        sourceType: safeValue(parsed.source_type || 'workflow'),
         streamOffset: safeValue(message.headers['x-stream-offset'] || message.headers['x-stream-offset'.toLowerCase()], ''),
-        heartbeat: Boolean(parsed.heartbeat) || eventType === 'CONSUMER_HEARTBEAT',
+        isHeartbeat: isHeartbeatMessage,
         workflowStartTimestamp,
         heartbeatIntervalSeconds,
         terminalStatus: mapEventTypeToTerminalStatus(eventType),
@@ -407,15 +434,17 @@
     }
 
     function getRunLastEventTimestamp(run) {
-      const candidateTimes = [run.lastSeenAt, run.lastHeartbeatAt, run.terminalAt]
+      const primaryTimes = [run.lastSeenAt, run.terminalAt]
         .map((ts) => new Date(ts || 0).getTime())
         .filter((ts) => Number.isFinite(ts) && ts > 0);
 
-      if (!candidateTimes.length) {
-        return 0;
+      if (primaryTimes.length) {
+        return Math.max(...primaryTimes);
       }
 
-      return Math.max(...candidateTimes);
+      // Fallback for runs that have only heartbeat traffic so far.
+      const heartbeatMs = new Date(run.lastHeartbeatAt || 0).getTime();
+      return Number.isFinite(heartbeatMs) && heartbeatMs > 0 ? heartbeatMs : 0;
     }
 
     function computeRunStatus(run) {
@@ -450,21 +479,25 @@
       return 'badge badge-light';
     }
 
-    function updateWorkflowFilterOptions() {
-      const workflows = Array.from(new Set(Array.from(liveRuns.values()).map((run) => run.workflow))).sort();
-      const currentValue = workflowFilter.value;
+    function updateUserFilterOptions() {
+      const users = Array.from(new Set(
+        Array.from(liveRuns.values())
+          .map((run) => safeValue(run.user))
+          .filter(Boolean)
+      )).sort();
+      const currentValue = userFilter.value;
 
-      workflowFilter.innerHTML = '<option value="">All Workflows</option>';
+      userFilter.innerHTML = '<option value="">All Users</option>';
 
-      workflows.forEach((workflow) => {
+      users.forEach((user) => {
         const option = document.createElement('option');
-        option.value = workflow;
-        option.textContent = workflow;
-        workflowFilter.appendChild(option);
+        option.value = user;
+        option.textContent = user;
+        userFilter.appendChild(option);
       });
 
-      if (workflows.includes(currentValue)) {
-        workflowFilter.value = currentValue;
+      if (users.includes(currentValue)) {
+        userFilter.value = currentValue;
       }
     }
 
@@ -515,7 +548,7 @@
 
       const filtered = selectedRunLogs.filter(passesFilters);
       if (!filtered.length) {
-        logOutput.textContent = `Waiting for non-heartbeat events for workflow ${selectedWorkflowId} from ${appliedLogOffset}.`;
+        logOutput.textContent = `Waiting for next event.`;
         return;
       }
 
@@ -547,10 +580,10 @@
     }
 
     function renderRunList() {
-      const workflowNeedle = workflowFilter.value;
+      const userNeedle = userFilter.value;
       const runs = Array.from(liveRuns.values())
         .filter((run) => runIsInsideLiveWindow(run))
-        .filter((run) => !workflowNeedle || run.workflow === workflowNeedle)
+        .filter((run) => !userNeedle || safeValue(run.user) === userNeedle)
         .sort((a, b) => getRunSortTimestamp(b) - getRunSortTimestamp(a));
 
       runCountBadge.textContent = String(runs.length);
@@ -568,7 +601,7 @@
         const statusValue = computeRunStatus(run);
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = `list-group-item list-group-item-action${selectedWorkflowId === run.workflowId ? ' active' : ''}`;
+        button.className = `list-group-item list-group-item-action${selectedWorkflowId === run.workflowId ? ' run-selected' : ''}`;
 
         const headerRow = document.createElement('div');
         headerRow.className = 'd-flex w-100 justify-content-between align-items-center';
@@ -596,7 +629,7 @@
         button.appendChild(headerRow);
         button.appendChild(identifier);
         button.appendChild(createRunMetaLine(`started ${startedAge} ago | last event ${lastEventAge} ago`));
-        button.appendChild(createRunMetaLine(`producer=${safeValue(run.producer, '--')}`));
+        button.appendChild(createRunMetaLine(`user=${safeValue(run.user, '--')}`));
 
         if (run.terminalStatus) {
           button.appendChild(createRunMetaLine(`terminal=${run.terminalStatus} @ ${safeValue(run.terminalAt, '--')}`));
@@ -617,10 +650,11 @@
     function upsertRunHeartbeat(event) {
       const current = liveRuns.get(event.workflowId) || {
         workflowId: event.workflowId,
+        workingDirectory: event.workingDirectory,
         workflow: event.workflow,
-        producer: event.producer,
-        workflowStartTimestamp: event.workflowStartTimestamp,
-        lastSeenAt: event.timestamp,
+        user: event.user,
+        workflowStartTimestamp: event.workflowStartTimestamp || '',
+        lastSeenAt: '',
         lastHeartbeatAt: event.timestamp,
         heartbeatIntervalSeconds: event.heartbeatIntervalSeconds,
         lastStreamOffset: event.streamOffset,
@@ -629,10 +663,14 @@
         terminalAt: '',
       };
 
+      current.workingDirectory = event.workingDirectory || current.workingDirectory;
       current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
-      current.producer = event.producer || current.producer;
-      current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
-      current.lastSeenAt = event.timestamp;
+      current.user = event.user || current.user;
+      // Keep the first known start timestamp for a run; heartbeats should enrich,
+      // but not rewrite start time once established.
+      if (!current.workflowStartTimestamp && event.workflowStartTimestamp) {
+        current.workflowStartTimestamp = event.workflowStartTimestamp;
+      }
       current.lastHeartbeatAt = event.timestamp;
       current.heartbeatIntervalSeconds = event.heartbeatIntervalSeconds || current.heartbeatIntervalSeconds;
       current.lastStreamOffset = event.streamOffset || current.lastStreamOffset;
@@ -641,12 +679,47 @@
       liveRuns.set(event.workflowId, current);
     }
 
+    function applyOrphanHeartbeat(event) {
+      if (!event.workingDirectory) {
+        return;
+      }
+
+      const orphanKey = normalizeDirectoryPath(event.workingDirectory);
+      if (!orphanKey) {
+        return;
+      }
+
+      let applied = false;
+      for (const run of liveRuns.values()) {
+        if (normalizeDirectoryPath(run.workingDirectory) === orphanKey) {
+          run.user = event.user || run.user;
+          if (!run.workflowStartTimestamp && event.workflowStartTimestamp) {
+            run.workflowStartTimestamp = event.workflowStartTimestamp;
+          }
+          run.lastHeartbeatAt = event.timestamp;
+          run.heartbeatIntervalSeconds = event.heartbeatIntervalSeconds || run.heartbeatIntervalSeconds;
+          applied = true;
+        }
+      }
+
+      if (!applied) {
+        // Cache for later — applied when a run with this working directory is created
+        pendingHeartbeats.set(orphanKey, {
+          ...event,
+          workingDirectory: orphanKey,
+        });
+      }
+    }
+
     function applyLifecycleEvent(event) {
       const current = liveRuns.get(event.workflowId) || {
         workflowId: event.workflowId,
+        workingDirectory: event.workingDirectory,
         workflow: event.workflow,
-        producer: event.producer,
-        workflowStartTimestamp: event.workflowStartTimestamp,
+        user: event.user,
+        // If explicit workflow start metadata is missing, anchor start time to
+        // the first lifecycle event observed for this run.
+        workflowStartTimestamp: event.workflowStartTimestamp || event.timestamp,
         lastSeenAt: event.timestamp,
         lastHeartbeatAt: '',
         heartbeatIntervalSeconds: null,
@@ -656,15 +729,36 @@
         terminalAt: '',
       };
 
+      current.workingDirectory = event.workingDirectory || current.workingDirectory;
       current.workflow = (event.workingDirectory ? event.workflow : null) || current.workflow;
-      current.producer = event.producer || current.producer;
-      current.workflowStartTimestamp = event.workflowStartTimestamp || current.workflowStartTimestamp;
+      current.user = event.user || current.user;
+      if (!current.workflowStartTimestamp && event.workflowStartTimestamp) {
+        current.workflowStartTimestamp = event.workflowStartTimestamp;
+      }
       current.lastSeenAt = event.timestamp;
       current.lastStreamOffset = event.streamOffset || current.lastStreamOffset;
       current.lastDestination = event.destination || current.lastDestination;
       if (event.terminalStatus) {
         current.terminalStatus = event.terminalStatus;
         current.terminalAt = event.timestamp;
+      }
+
+      // Apply any cached orphan heartbeat that matches this run's working directory.
+      // Allow backfill when user/start/interval are missing even if heartbeat already exists.
+      const currentWorkingDirectoryKey = normalizeDirectoryPath(current.workingDirectory);
+      const needsHeartbeatBackfill = !current.lastHeartbeatAt
+        || !current.user
+        || !current.workflowStartTimestamp
+        || !current.heartbeatIntervalSeconds;
+      if (currentWorkingDirectoryKey && needsHeartbeatBackfill) {
+        const pending = pendingHeartbeats.get(currentWorkingDirectoryKey);
+        if (pending) {
+          current.user = pending.user || current.user;
+          current.workflowStartTimestamp = pending.workflowStartTimestamp || current.workflowStartTimestamp;
+          current.heartbeatIntervalSeconds = pending.heartbeatIntervalSeconds || current.heartbeatIntervalSeconds;
+          current.lastHeartbeatAt = pending.timestamp;
+          pendingHeartbeats.delete(currentWorkingDirectoryKey);
+        }
       }
 
       liveRuns.set(event.workflowId, current);
@@ -726,13 +820,17 @@
 
         if (isHeartbeatEvent(event)) {
           streamCounts.live += 1;
-          upsertRunHeartbeat(event);
-          updateWorkflowFilterOptions();
-          renderRunList();
+          if (event.workflowId) {
+            upsertRunHeartbeat(event);
+          } else {
+            applyOrphanHeartbeat(event);
+          }
         } else {
           applyLifecycleEvent(event);
-          renderRunList();
         }
+
+        updateUserFilterOptions();
+        renderRunList();
       } else {
         streamCounts.raw += 1;
       }
@@ -817,6 +915,7 @@
 
     function resetState() {
       liveRuns.clear();
+      pendingHeartbeats.clear();
       clearSelectedLogs();
       selectedWorkflowId = null;
       appliedLogOffset = DEFAULT_LOG_START;
@@ -826,7 +925,7 @@
       streamCounts.live = 0;
       streamCounts.logs = 0;
       updateSelectedRunLabel();
-      updateWorkflowFilterOptions();
+      updateUserFilterOptions();
       updateOffsetHelp();
       renderRunList();
       renderLogs();
@@ -880,17 +979,7 @@
       client.activate();
     }
 
-    clearBtn.addEventListener('click', () => {
-      unsubscribeAll(liveSubscriptions);
-      unsubscribeAll(logSubscriptions);
-      resetState();
-
-      if (client && client.connected) {
-        subscribeLiveRuns();
-      }
-    });
-
-    workflowFilter.addEventListener('change', renderRunList);
+    userFilter.addEventListener('change', renderRunList);
     liveInterval.addEventListener('change', () => {
       renderRunList();
       if (client && client.connected) {

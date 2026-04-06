@@ -39,9 +39,20 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "stream",
-        "x-max-age": "7D"
+        "x-queue-type": "stream"
       }
+    }
+  ],
+  "policies": [
+    {
+      "name": "retention",
+      "pattern": "snakemake.events",
+      "vhost": "/",
+      "definition": {
+        "max-age": "7D"
+      },
+      "priority": 0,
+      "apply-to": "streams"
     }
   ]
 }
