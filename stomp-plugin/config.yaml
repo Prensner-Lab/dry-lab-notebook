@@ -1,0 +1,10 @@
+logger: stomp
+logger-stomp-host: localhost
+logger-stomp-port: 61613
+logger-stomp-user: drylabnotebook
+logger-stomp-password: guest
+logger-stomp-queue: /queue/snakemake.events
+logger-stomp-use-stream: true
+logger-stomp-stream-filter-by-workflow: true
+logger-stomp-consumer-heartbeat-interval: 10
+logger-stomp-formatter-class: snakemake_logger_plugin_stomp.formatters.ComprehensiveEventFormatter
