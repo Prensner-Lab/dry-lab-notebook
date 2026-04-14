@@ -27,13 +27,14 @@ def _load_dotenv(dotenv_path: Path) -> None:
         key = key.strip()
         value = value.strip()
 
-        if not key or key in os.environ:
+        if not key:
             continue
 
         if ((value.startswith('"') and value.endswith('"')) or
                 (value.startswith("'") and value.endswith("'"))):
             value = value[1:-1]
 
+        # Allow .env to intentionally override inherited/container defaults.
         os.environ[key] = value
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -167,6 +168,7 @@ SOCIAL_AUTH_GLOBUS_KEY = os.environ.get("SOCIAL_AUTH_GLOBUS_KEY")
 SOCIAL_AUTH_GLOBUS_SECRET = os.environ.get("SOCIAL_AUTH_GLOBUS_SECRET")
 
 STOMP_STREAM_QUEUE = os.environ.get("STOMP_STREAM_QUEUE", "/queue/snakemake.events")
+SLURM_STREAM_QUEUE = os.environ.get("SLURM_STREAM_QUEUE", "/queue/slurm.jobs")
 STOMP_BROWSER_WS_URL = os.environ.get("STOMP_BROWSER_WS_URL")
 RABBITMQ_DEFAULT_USER = os.environ.get("RABBITMQ_DEFAULT_USER", "guest")
 RABBITMQ_DEFAULT_PASS = os.environ.get("RABBITMQ_DEFAULT_PASS", "guest")

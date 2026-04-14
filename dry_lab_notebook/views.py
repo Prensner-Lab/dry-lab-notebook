@@ -375,3 +375,23 @@ class StompLogsView(View):
 
     def get(self, request: django.http.HttpRequest):
         return render(request, self.template, self.get_context_data())
+
+
+class SlurmJobsView(View):
+
+    DEFAULT_TEMPLATE = "slurm-jobs.html"
+
+    def __init__(self, template=None):
+        super().__init__()
+        self.template = template or self.DEFAULT_TEMPLATE
+
+    def get_context_data(self):
+        return {
+            "SLURM_STREAM_QUEUE": getattr(settings, "SLURM_STREAM_QUEUE", "/queue/slurm.jobs"),
+            "STOMP_BROWSER_WS_URL": settings.STOMP_BROWSER_WS_URL,
+            "RABBITMQ_DEFAULT_USER": settings.RABBITMQ_DEFAULT_USER,
+            "RABBITMQ_DEFAULT_PASS": settings.RABBITMQ_DEFAULT_PASS,
+        }
+
+    def get(self, request: django.http.HttpRequest):
+        return render(request, self.template, self.get_context_data())

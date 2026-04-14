@@ -1,0 +1,380 @@
+{%extends "globus-portal-framework/v2/base.html"%}
+{% load static is_active %}
+
+{%block headextras%}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/search.css' %}" />
+{% endblock %}
+
+{% block breadcrumbs %}{{block.super}}{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex align-items-center mb-3">
+        <h2 class="mb-0 mr-3">SLURM Jobs</h2>
+        <span id="brokerIndicator" class="badge badge-secondary">connecting&hellip;</span>
+        <small id="brokerQueue" class="text-muted ml-2"></small>
+      </div>
+      <div id="connectionError" class="alert alert-danger d-none mb-3" role="alert">
+        <span id="connectionErrorMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-3 mb-2">
+      <label for="stateFilter" class="mb-1">State</label>
+      <select id="stateFilter" class="form-control form-control-sm">
+        <option value="ACTIVE" selected>Active Only</option>
+        <option value="ALL">All States</option>
+        <option value="RUNNING">RUNNING</option>
+        <option value="PENDING">PENDING</option>
+        <option value="COMPLETED">COMPLETED</option>
+        <option value="FAILED">FAILED</option>
+        <option value="CANCELLED">CANCELLED</option>
+        <option value="TIMEOUT">TIMEOUT</option>
+      </select>
+    </div>
+    <div class="col-md-3 mb-2">
+      <label for="userFilter" class="mb-1">User</label>
+      <select id="userFilter" class="form-control form-control-sm">
+        <option value="">All Users</option>
+      </select>
+    </div>
+    <div class="col-md-4 mb-2">
+      <label for="searchFilter" class="mb-1">Search</label>
+      <input id="searchFilter" class="form-control form-control-sm" type="text" placeholder="job_id or job_name" />
+    </div>
+    <div class="col-md-2 mb-2">
+      <label class="mb-1">Updated</label>
+      <div id="lastUpdateText" class="small text-muted">Never</div>
+    </div>
+  </div>
+
+  <div class="row mb-2">
+    <div class="col-sm-4 mb-2">
+      <span class="badge badge-primary">Visible: <span id="visibleCount">0</span></span>
+    </div>
+    <div class="col-sm-4 mb-2">
+      <span class="badge badge-info">Total Seen: <span id="totalCount">0</span></span>
+    </div>
+    <div class="col-sm-4 mb-2">
+      <span class="badge badge-success">Active Seen: <span id="activeCount">0</span></span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped table-bordered">
+          <thead class="thead-light">
+            <tr>
+              <th>Job ID</th>
+              <th>Job Name</th>
+              <th>User</th>
+              <th>Account</th>
+              <th>Partition</th>
+              <th>State</th>
+              <th>Elapsed</th>
+              <th>CPUs</th>
+              <th>Requested Memory</th>
+            </tr>
+          </thead>
+          <tbody id="jobsTableBody"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="alert alert-secondary">No jobs yet. Waiting for SLURM_JOB_STATS events.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@stomp/stompjs@7.2.0/bundles/stomp.umd.min.js"></script>
+<script>
+  (() => {
+    const STREAM_DESTINATION = '{{ SLURM_STREAM_QUEUE|default:"/queue/slurm.jobs" }}';
+    const CONFIGURED_BROKER_URL = '{{ STOMP_BROWSER_WS_URL|default:""|escapejs }}';
+    const BROKER_LOGIN = '{{ RABBITMQ_DEFAULT_USER|default:"guest" }}';
+    const BROKER_PASSCODE = '{{ RABBITMQ_DEFAULT_PASS|default:"guest" }}';
+
+    const ACTIVE_STATES = new Set(['RUNNING', 'PENDING', 'CONFIGURING', 'COMPLETING']);
+
+    const brokerIndicator = document.getElementById('brokerIndicator');
+    const brokerQueue = document.getElementById('brokerQueue');
+    const connectionError = document.getElementById('connectionError');
+    const connectionErrorMsg = document.getElementById('connectionErrorMsg');
+
+    const stateFilter = document.getElementById('stateFilter');
+    const userFilter = document.getElementById('userFilter');
+    const searchFilter = document.getElementById('searchFilter');
+
+    const jobsTableBody = document.getElementById('jobsTableBody');
+    const emptyState = document.getElementById('emptyState');
+
+    const visibleCount = document.getElementById('visibleCount');
+    const totalCount = document.getElementById('totalCount');
+    const activeCount = document.getElementById('activeCount');
+    const lastUpdateText = document.getElementById('lastUpdateText');
+
+    const jobsById = new Map();
+    let client = null;
+    let liveSubscription = null;
+    let subscriptionCounter = 0;
+
+    function safeValue(value, fallback = '') {
+      return value === undefined || value === null ? fallback : String(value);
+    }
+
+    function escapeHtml(value) {
+      return safeValue(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function resolveBrokerUrl() {
+      if (CONFIGURED_BROKER_URL) {
+        return CONFIGURED_BROKER_URL;
+      }
+      const hostname = window.location.hostname || 'localhost';
+      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${scheme}://${hostname}:15674/ws`;
+    }
+
+    function toPassiveDestination(destination) {
+      const raw = safeValue(destination);
+      if (raw.toLowerCase().startsWith('/queue/')) {
+        return '/amq/queue/' + raw.slice('/queue/'.length);
+      }
+      return raw;
+    }
+
+    function normalizeState(payload, job) {
+      const state = safeValue(payload.job_state || job.state || job.state_raw, '').toUpperCase();
+      return state || 'UNKNOWN';
+    }
+
+    function parseEvent(message) {
+      let payload;
+      try {
+        payload = JSON.parse(message.body);
+      } catch (_err) {
+        return null;
+      }
+
+      if (!payload || payload.event_type !== 'SLURM_JOB_STATS') {
+        return null;
+      }
+
+      const job = payload.job || {};
+      const jobId = safeValue(payload.job_id || job.job_id);
+      if (!jobId) {
+        return null;
+      }
+
+      return {
+        job_id: jobId,
+        job_name: safeValue(job.job_name),
+        user: safeValue(job.user),
+        account: safeValue(job.account),
+        partition: safeValue(job.partition),
+        state: normalizeState(payload, job),
+        elapsed_raw_seconds: Number(job.elapsed_raw_seconds || 0),
+        cpus: safeValue(job.cpus),
+        requested_memory: safeValue(job.requested_memory),
+        event_time: safeValue(payload.event_time || payload.query_window_end || new Date().toISOString()),
+      };
+    }
+
+    function renderUserFilter() {
+      const selected = userFilter.value;
+      const users = Array.from(
+        new Set(
+          Array.from(jobsById.values())
+            .map((job) => safeValue(job.user))
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+
+      userFilter.innerHTML = '<option value="">All Users</option>';
+      users.forEach((user) => {
+        const option = document.createElement('option');
+        option.value = user;
+        option.textContent = user;
+        userFilter.appendChild(option);
+      });
+
+      if (users.includes(selected)) {
+        userFilter.value = selected;
+      }
+    }
+
+    function formatElapsed(seconds) {
+      const total = Number(seconds || 0);
+      if (!Number.isFinite(total) || total < 0) {
+        return '';
+      }
+
+      const days = Math.floor(total / 86400);
+      const hours = Math.floor((total % 86400) / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      const hhmmss = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      return days > 0 ? `${days}d ${hhmmss}` : hhmmss;
+    }
+
+    function passesFilters(job) {
+      const selectedState = stateFilter.value;
+      if (selectedState === 'ACTIVE' && !ACTIVE_STATES.has(job.state)) {
+        return false;
+      }
+      if (selectedState !== 'ACTIVE' && selectedState !== 'ALL' && selectedState !== job.state) {
+        return false;
+      }
+
+      const selectedUser = userFilter.value;
+      if (selectedUser && selectedUser !== job.user) {
+        return false;
+      }
+
+      const term = safeValue(searchFilter.value).trim().toLowerCase();
+      if (term) {
+        const haystack = `${job.job_id} ${job.job_name}`.toLowerCase();
+        if (!haystack.includes(term)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    function renderTable() {
+      const allJobs = Array.from(jobsById.values());
+      const filteredJobs = allJobs
+        .filter(passesFilters)
+        .sort((a, b) => new Date(b.event_time).getTime() - new Date(a.event_time).getTime());
+
+      jobsTableBody.innerHTML = '';
+      filteredJobs.forEach((job) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${escapeHtml(job.job_id)}</td>
+          <td>${escapeHtml(job.job_name)}</td>
+          <td>${escapeHtml(job.user)}</td>
+          <td>${escapeHtml(job.account)}</td>
+          <td>${escapeHtml(job.partition)}</td>
+          <td><span class="badge badge-${ACTIVE_STATES.has(job.state) ? 'success' : 'secondary'}">${escapeHtml(job.state)}</span></td>
+          <td>${escapeHtml(formatElapsed(job.elapsed_raw_seconds))}</td>
+          <td>${escapeHtml(job.cpus)}</td>
+          <td>${escapeHtml(job.requested_memory)}</td>
+        `;
+        jobsTableBody.appendChild(row);
+      });
+
+      const activeSeen = allJobs.filter((job) => ACTIVE_STATES.has(job.state)).length;
+      visibleCount.textContent = String(filteredJobs.length);
+      totalCount.textContent = String(allJobs.length);
+      activeCount.textContent = String(activeSeen);
+      emptyState.classList.toggle('d-none', filteredJobs.length > 0);
+    }
+
+    function showConnectionError(message) {
+      connectionErrorMsg.textContent = message;
+      connectionError.classList.remove('d-none');
+      brokerIndicator.className = 'badge badge-danger';
+      brokerIndicator.textContent = 'disconnected';
+    }
+
+    function hideConnectionError() {
+      connectionError.classList.add('d-none');
+      connectionErrorMsg.textContent = '';
+      brokerIndicator.className = 'badge badge-success';
+      brokerIndicator.textContent = 'connected';
+    }
+
+    function subscribeLiveStream() {
+      if (!client || !client.connected) {
+        return;
+      }
+
+      if (liveSubscription) {
+        liveSubscription.unsubscribe();
+        liveSubscription = null;
+      }
+
+      liveSubscription = client.subscribe(
+        toPassiveDestination(STREAM_DESTINATION),
+        (message) => {
+          const parsed = parseEvent(message);
+          if (!parsed) {
+            return;
+          }
+
+          jobsById.set(parsed.job_id, parsed);
+          renderUserFilter();
+          renderTable();
+          lastUpdateText.textContent = new Date(parsed.event_time).toLocaleString();
+          message.ack();
+        },
+        {
+          id: `slurm-live-${Date.now()}-${subscriptionCounter++}`,
+          ack: 'client-individual',
+          'prefetch-count': '200',
+          'x-stream-offset': 'next',
+        }
+      );
+    }
+
+    function connect() {
+      if (!window.StompJs || !window.StompJs.Client) {
+        showConnectionError('STOMP client library failed to load.');
+        return;
+      }
+
+      brokerQueue.textContent = `Queue: ${STREAM_DESTINATION}`;
+
+      client = new StompJs.Client({
+        brokerURL: resolveBrokerUrl(),
+        connectHeaders: {
+          login: BROKER_LOGIN,
+          passcode: BROKER_PASSCODE,
+        },
+        reconnectDelay: 3000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+        onConnect: () => {
+          hideConnectionError();
+          subscribeLiveStream();
+        },
+        onStompError: (frame) => {
+          const details = safeValue(frame && frame.headers && frame.headers.message, 'Broker error');
+          const body = safeValue(frame && frame.body, '');
+          showConnectionError(body ? `${details}: ${body}` : details);
+        },
+        onWebSocketClose: () => {
+          showConnectionError('Connection closed. Reconnecting...');
+        },
+        onWebSocketError: () => {
+          showConnectionError('WebSocket error while connecting to broker.');
+        },
+      });
+
+      client.activate();
+    }
+
+    stateFilter.addEventListener('change', renderTable);
+    userFilter.addEventListener('change', renderTable);
+    searchFilter.addEventListener('input', renderTable);
+
+    window.addEventListener('beforeunload', () => {
+      if (client) {
+        client.deactivate();
+      }
+    });
+
+    connect();
+  })();
+</script>
+{% endblock %}

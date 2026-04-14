@@ -41,12 +41,31 @@
       "arguments": {
         "x-queue-type": "stream"
       }
+    },
+    {
+      "name": "slurm.jobs",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "stream"
+      }
     }
   ],
   "policies": [
     {
       "name": "retention",
       "pattern": "snakemake.events",
+      "vhost": "/",
+      "definition": {
+        "max-age": "7D"
+      },
+      "priority": 0,
+      "apply-to": "streams"
+    },
+    {
+      "name": "retention-slurm-jobs",
+      "pattern": "slurm.jobs",
       "vhost": "/",
       "definition": {
         "max-age": "7D"

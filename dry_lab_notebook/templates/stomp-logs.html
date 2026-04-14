@@ -835,7 +835,7 @@
         streamCounts.raw += 1;
       }
 
-      acknowledgeMessage(message);
+      message.ack();
     }
 
     function handleLogMessage(message) {
@@ -855,7 +855,7 @@
         streamCounts.raw += 1;
       }
 
-      acknowledgeMessage(message);
+      message.ack();
     }
 
     function subscribeLiveRuns() {
